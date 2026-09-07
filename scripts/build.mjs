@@ -7,17 +7,15 @@ body = body.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
 body = body.replace(/<div class="homepage-chatbot">[\s\S]*?(?=<div style="display:none;">)/, '');
 body = body.replace(/\s+on\w+="[^"]*"/g, '');
 body = body.replace(/<input\b[^>]*type="hidden"[^>]*>/gi, '');
-body = body.replace(/href="(\/en[^"#]*|\/tr[^"#]*)"/g, (_, url) =>
-  url === '/en' ? 'href="/en"' : `href="https://www.ziraatbank.com.tr${url}" target="_blank" rel="noopener noreferrer"`
-);
+body = body.replace(/href="(\/en[^"#]*|\/tr[^"#]*)"/g, (_, url) => `href="${url}"`);
 body = body.replace(/href="javascript:;"/g, 'href="#"');
 body = body.replace(
   /class="langUrl" href="#"/g,
-  'class="langUrl" href="https://www.ziraatbank.com.tr/tr" target="_blank" rel="noopener noreferrer"'
+  'class="langUrl" href="/tr"'
 );
 body = body.replace(
   /href="#" class="langUrl"/g,
-  'href="https://www.ziraatbank.com.tr/tr" class="langUrl" target="_blank" rel="noopener noreferrer"'
+  'href="/tr" class="langUrl"'
 );
 body = body.replace(
   /<div class="item box-height owl-lazy default"/,
@@ -29,9 +27,26 @@ body = body.replace(/(id="home-icon-[^"]+">)/g, '$1<span class="animation" aria-
 body += '</div></div>';
 const cookie = (source.match(/<div class="cookie-box[\s\S]*?<\/div>/)?.[0] || '').replace(
   /href="(\/tr[^"]+)"/g,
-  'href="https://www.ziraatbank.com.tr$1" target="_blank" rel="noopener noreferrer"'
+  'href="$1"'
 );
-const html = `<!doctype html>
+function neutralizeExternalLinks(markup) {
+  return markup.replace(/<a\b[^>]*>/gi, (tag) => {
+    const href = tag.match(/\bhref=(['"])(https?:\/\/[^'"]*)\1/i);
+    if (!href) return tag;
+    let localHref = '';
+    try {
+      const parsed = new URL(href[2]);
+      if (/^\/(?:en|tr)(?:\/|$)/i.test(parsed.pathname))
+        localHref = parsed.pathname + parsed.search + parsed.hash;
+      else if (/^\/Transactions\//i.test(parsed.pathname)) localHref = '/internet-banking';
+    } catch {}
+    return tag
+      .replace(/\bhref=(['"])https?:\/\/[^'"]*\1/i, `href="${localHref}"`)
+      .replace(/\s+target=(['"])_blank\1/gi, '')
+      .replace(/\s+rel=(['"])noopener noreferrer\1/gi, '');
+  });
+}
+const html = neutralizeExternalLinks(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ziraat Bank — Local Site</title><meta name="description" content="Local visual reproduction of the public Ziraat Bank English homepage.">
 <meta name="robots" content="noindex,nofollow"><link rel="icon" href="/SiteAssets/images/favicon.ico">
@@ -49,11 +64,13 @@ ${cookie}
   <form class="chat-form"><label class="sr-only" for="chat-text">Message</label><textarea id="chat-text" maxlength="2000" rows="2" placeholder="Write your message…" required></textarea><button type="submit">Send</button></form>
 </section>
 <dialog id="local-dialog" aria-labelledby="dialog-title"><button class="dialog-close" aria-label="Close dialog">×</button><h2 id="dialog-title"></h2><div id="dialog-content"></div></dialog>
-</body></html>`;
+</body></html>`);
 await mkdir(new URL('public/', root), { recursive: true });
 await mkdir(new URL('public/vendor/', root), { recursive: true });
 await copyFile(new URL('node_modules/gsap/dist/gsap.min.js', root), new URL('public/vendor/gsap.min.js', root));
 await writeFile(new URL('public/index.html', root), html);
-const refs = [...html.matchAll(/(?:src|href)="(\/[^"#]+)"/g)].map((m) => m[1]).filter((p) => p !== '/en');
+const refs = [...html.matchAll(/(?:src|href)="(\/[^"#]+)"/g)]
+  .map((m) => m[1])
+  .filter((p) => /\.[a-z0-9]+(?:\?|$)/i.test(p));
 for (const ref of new Set(refs)) await stat(new URL('public' + ref, root));
 console.log('Built public/index.html from recursos/original.html. Local HTML assets verified.');

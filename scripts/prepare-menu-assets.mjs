@@ -25,10 +25,7 @@ const lines = [];
 for (const assetPath of [...assetPaths].sort()) {
   const output = path.join(projectRoot, 'public', ...assetPath.split('/').filter(Boolean));
   await mkdir(path.dirname(output), { recursive: true });
-  lines.push(
-    `url = "https://www.ziraatbank.com.tr${assetPath}"`,
-    `output = "${path.relative(projectRoot, output).replaceAll('\\', '/')}"`
-  );
+  lines.push(`path = "${assetPath}"`, `output = "${path.relative(projectRoot, output).replaceAll('\\', '/')}"`);
 }
 await writeFile(path.join(projectRoot, 'recursos', 'download-menu-assets.conf'), `${lines.join('\n')}\n`);
 console.log(`Prepared ${assetPaths.size} menu image downloads.`);

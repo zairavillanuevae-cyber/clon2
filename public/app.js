@@ -16,12 +16,10 @@ function paragraph(text) {
   el.textContent = text;
   return el;
 }
-function officialLink(label, url) {
+function officialLink(label) {
   const el = document.createElement('a');
   el.textContent = label;
-  el.href = url;
-  el.target = '_blank';
-  el.rel = 'noopener noreferrer';
+  el.href = '';
   return el;
 }
 $('.dialog-close').addEventListener('click', () => dialog.close());
@@ -34,7 +32,11 @@ dialog.addEventListener('click', (e) => {
 dialog.addEventListener('close', () => {
   previousFocus?.focus();
 });
-$$('a[target="_blank"]').forEach((a) => (a.rel = 'noopener noreferrer'));
+$$('a[href^="http://"], a[href^="https://"]').forEach((a) => {
+  a.href = '';
+  a.target = '_self';
+  a.removeAttribute('rel');
+});
 
 // Carousel: local images, keyboard/touch support, pause, and reduced-motion preference.
 const slider = $('.main-slider');
@@ -212,7 +214,7 @@ $('a', banking).addEventListener('click', (e) => {
   e.preventDefault();
   $('a', banking).setAttribute('aria-expanded', String(banking.classList.toggle('open')));
 });
-$$('.internet-branch .individual-btn, .header-bottom .individual-btn').forEach((link) => {
+$$('.internet-branch .individual-btn, .internet-branch .corporate-btn, .header-bottom .individual-btn').forEach((link) => {
   link.href = '/internet-banking';
   link.target = '_self';
   link.removeAttribute('data-type');
@@ -230,9 +232,9 @@ $('.search-close').addEventListener('click', (e) => {
 });
 const searchItems = [
   ...new Map(
-    $$('a[href^="https://www.ziraatbank.com.tr/en/"]').map((a) => [
-      a.href,
-      { title: a.textContent.trim().replace(/\s+/g, ' '), url: a.href }
+    $$('a[href=""]').map((a) => [
+      a.textContent.trim().replace(/\s+/g, ' '),
+      { title: a.textContent.trim().replace(/\s+/g, ' '), url: window.location.href }
     ])
   ).values()
 ].filter((x) => x.title && !x.title.includes('FOR MORE'));
@@ -298,7 +300,7 @@ const rates = [
 $('#ZiraatVerileri').innerHTML =
   `<ul class="rates-list">${rates.map(([name, buy, sell]) => `<li class="rate-item"><h3>${name}</h3><div class="rate-columns"><div><small>BANK BUY</small><strong>${buy}</strong></div><div><small>BANK SELL</small><strong>${sell}</strong></div></div></li>`).join('')}</ul><p class="rates-note">Reference snapshot · 03 Sep 2026<br>Local site — rates are not live.</p>`;
 $('#PiyasaVerileri').innerHTML =
-  '<div class="market-empty"><p>Market information</p><p>Live market data is available on the official Ziraat Bank website.</p><a href="https://www.ziraatbank.com.tr/en" target="_blank" rel="noopener noreferrer">View current market data ↗</a></div>';
+  '<div class="market-empty"><p>Market information</p><p>Live market data is available on the official Ziraat Bank website.</p><a href="">View current market data ↗</a></div>';
 function setupTabs(titleSelector, panelsSelector) {
   const links = $$(`${titleSelector} a`);
   const panels = $$(panelsSelector);
@@ -446,7 +448,7 @@ function locate() {
     )
   );
   content.append(
-    officialLink('Open official Branches & ATMs locator ↗', 'https://www.ziraatbank.com.tr/en/contact-us/branches-atms')
+    officialLink('Open official Branches & ATMs locator ↗')
   );
   showDialog('Closest Ziraat', content);
 }
@@ -481,10 +483,6 @@ if (cookie) {
           localStorage.setItem('ziraat-site-cookie-dismissed', 'true');
         } catch {}
       });
-    } else if (a.getAttribute('href')?.startsWith('/')) {
-      a.href = 'https://www.ziraatbank.com.tr' + a.getAttribute('href');
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
     }
   });
 }

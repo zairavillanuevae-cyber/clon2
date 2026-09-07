@@ -117,14 +117,44 @@ const routes = new Map([
   ['/en/corporate', '/en/corporate'],
   ['/tr', '/tr']
 ]);
+const localRoutes = new Set(['/en', ...routes.values()]);
+function neutralizeExternalLinks(markup) {
+  return markup.replace(/<a\b[^>]*>/gi, (tag) => {
+    const href = tag.match(/\bhref=(['"])(https?:\/\/[^'"]*)\1/i);
+    if (!href) return tag;
+    let localHref = '';
+    try {
+      const parsed = new URL(href[2]);
+      if (/^\/(?:en|tr)(?:\/|$)/i.test(parsed.pathname))
+        localHref = parsed.pathname + parsed.search + parsed.hash;
+      else if (/^\/Transactions\//i.test(parsed.pathname)) localHref = '/internet-banking';
+    } catch {}
+    return tag
+      .replace(/\bhref=(['"])https?:\/\/[^'"]*\1/i, `href="${localHref}"`)
+      .replace(/\s+target=(['"])_blank\1/gi, '')
+      .replace(/\s+rel=(['"])noopener noreferrer\1/gi, '');
+  });
+}
+function neutralizeUnavailableLocalLinks(markup) {
+  return markup.replace(/<a\b[^>]*>/gi, (tag) => {
+    const href = tag.match(/\bhref=(['"])(\/(?:en|tr)(?:\/[^'"]*)?)\1/i);
+    if (!href) return tag;
+    const pathname = href[2].split(/[?#]/, 1)[0].replace(/\/$/, '') || '/';
+    if (localRoutes.has(pathname)) return tag;
+    return tag
+      .replace(/\bhref=(['"])\/(?:en|tr)(?:\/[^'"]*)?\1/i, 'href=""')
+      .replace(/\s+target=(['"])_blank\1/gi, '')
+      .replace(/\s+rel=(['"])noopener noreferrer\1/gi, '');
+  });
+}
 function localize(s) {
   for (const [from, to] of routes) {
-    s = s.replaceAll(`href="https://www.ziraatbank.com.tr${from}"`, `href="${to}"`);
+    s = s.replaceAll(`href="${from}"`, `href="${to}"`);
     s = s.replaceAll(`href="${to}" target="_blank" rel="noopener noreferrer" target="_blank"`, `href="${to}"`);
     s = s.replaceAll(`href="${to}" target="_blank" rel="noopener noreferrer"`, `href="${to}"`);
     s = s.replaceAll(`href="${to}" target="_blank"`, `href="${to}"`);
   }
-  return s;
+  return neutralizeUnavailableLocalLinks(neutralizeExternalLinks(s));
 }
 let home = localize(await readFile(new URL('public/index.html', root), 'utf8'));
 await writeFile(new URL('public/index.html', root), home);
@@ -147,7 +177,7 @@ const esc = (s) =>
     /[&<>"']/g,
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
   );
-const official = (u) => (u?.startsWith('/') ? 'https://www.ziraatbank.com.tr' + u : u || '#');
+const localTarget = (u) => (u?.startsWith('/') ? u : '');
 function decodeText(s = '') {
   return s
     .replace(/<[^>]+>/g, '')
@@ -185,8 +215,7 @@ function safeRich(s = '') {
     .replace(/<menu\b[^>]*>[\s\S]*?<\/menu>/gi, '')
     .replace(/<ie:menuitem\b[^>]*>[\s\S]*?<\/ie:menuitem>/gi, '')
     .replace(/\son\w+=("[^"]*"|'[^']*')/gi, '')
-    .replace(/href=("|')javascript:[\s\S]*?\1/gi, 'href="#"')
-    .replace(/href="\//g, 'href="https://www.ziraatbank.com.tr/');
+    .replace(/href=("|')javascript:[\s\S]*?\1/gi, 'href="#"');
 }
 function detailContent(raw, title, sourceRoute) {
   const pageTitle = decodeText(raw.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]) || title;
@@ -203,7 +232,7 @@ function detailContent(raw, title, sourceRoute) {
       IBAN: 'IBAN results depend on live bank data and the account information entered by the user.',
       'Time Out Account': 'Current time-out account queries are provided by the bank’s secure online service.'
     };
-    return `<section class="reference-service"><h2>${esc(pageTitle)}</h2><p>${esc(descriptions[title] || 'This service depends on current information from the bank.')}</p><a class="btn btn-red" href="${esc(official(sourceRoute))}" target="_blank" rel="noopener noreferrer">OPEN OFFICIAL SERVICE</a></section>`;
+    return `<section class="reference-service"><h2>${esc(pageTitle)}</h2><p>${esc(descriptions[title] || 'This service depends on current information from the bank.')}</p><a class="btn btn-red" href="${esc(localTarget(sourceRoute))}">OPEN OFFICIAL SERVICE</a></section>`;
   }
   return `<article class="clone-detail">${image ? `<img src="${esc(image)}" alt="">` : ''}<div class="clone-detail-body"><h2>${esc(pageTitle)}</h2>${lead ? `<p class="clone-detail-lead">${safeRich(lead)}</p>` : ''}${rich}</div></article>`;
 }
@@ -211,19 +240,19 @@ function content(raw, title, sourceRoute) {
   const m = raw.match(/var navigationContainer=({.*?});<\/script>/s);
   if (!m)
     return title === 'Product and Service Fees'
-      ? `<section class="fees-local"><h2>Fee information</h2><p>Current fee records are supplied by the bank's online service. This local copy preserves the public page and directs current data to the official source.</p><a class="btn btn-red" href="https://www.ziraatbank.com.tr/en/product-and-service-fees" target="_blank" rel="noopener noreferrer">VIEW CURRENT FEES</a></section>`
+      ? `<section class="fees-local"><h2>Fee information</h2><p>Current fee records are supplied by the bank's online service. This local copy preserves the public page and directs current data to the official source.</p><a class="btn btn-red" href="">VIEW CURRENT FEES</a></section>`
       : detailContent(raw, title, sourceRoute);
   const items = JSON.parse(m[1]).Navigation?.Childs || [];
   return `<div class="clone-card-grid">${items
     .map((x) =>
       x.IsHtml && x.Html
         ? `<article class="clone-card clone-rich">${x.Html}</article>`
-        : `<article class="clone-card">${x.Img ? `<img src="${esc(x.Img)}" alt="">` : ''}<div class="clone-card-body"><h2><a href="${esc(official(x.Url))}" target="_blank" rel="noopener noreferrer">${esc(x.Title || title)}</a></h2>${
+        : `<article class="clone-card">${x.Img ? `<img src="${esc(x.Img)}" alt="">` : ''}<div class="clone-card-body"><h2><a href="${esc(localTarget(x.Url))}">${esc(x.Title || title)}</a></h2>${
             x.Childs?.length
               ? `<ul>${x.Childs.slice(0, 8)
                   .map(
                     (y) =>
-                      `<li><a href="${esc(official(y.Url))}" target="_blank" rel="noopener noreferrer">${esc(y.Title)}</a></li>`
+                      `<li><a href="${esc(localTarget(y.Url))}">${esc(y.Title)}</a></li>`
                   )
                   .join('')}</ul>`
               : ''
@@ -268,14 +297,14 @@ const banners = [
 const trCards = banners
   .map(
     (m, i) =>
-      `<article class="tr-banner" style="background-image:url('${m[1]}')"><div>${m[2]}<a href="https://www.ziraatbank.com.tr/tr" target="_blank" rel="noopener noreferrer">Detaylı Bilgi</a></div></article>`
+      `<article class="tr-banner" style="background-image:url('${m[1]}')"><div>${m[2]}<a href="">Detaylı Bilgi</a></div></article>`
   )
   .join('');
 const trDir = new URL('public/tr/', root);
 await mkdir(trDir, { recursive: true });
 await writeFile(
   new URL('index.html', trDir),
-  `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ziraat Bankası — Yerel Site</title><meta name="robots" content="noindex,nofollow"><link rel="stylesheet" href="/SiteAssets/css/min/magiclick.min.css"><link rel="stylesheet" href="/clone.css"><link rel="stylesheet" href="/subpages.css"></head><body class="global"><header class="tr-local-bar"><a href="/en">ENGLISH</a><img src="/SiteAssets/images/logo.png" alt="Ziraat Bankası"><a href="https://bireysel.ziraatbank.com.tr/Transactions/Login/FirstLogin.aspx" target="_blank" rel="noopener noreferrer">İnternet Şubesi ↗</a></header><main><h1 class="sr-only">T.C. Ziraat Bankası A.Ş.</h1><div class="tr-grid">${trCards}</div><section class="tr-local-content"><h2>Ziraat Bankası</h2><p>Türkçe ana sayfanın yerel görsel kopyası. İşlem gerektiren bağlantılar resmi web sitesinde açılır.</p></section></main><p class="site-note">Yerel site · Bankacılık işlemi yapılmaz.</p></body></html>`
+  `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ziraat Bankası — Yerel Site</title><meta name="robots" content="noindex,nofollow"><link rel="stylesheet" href="/SiteAssets/css/min/magiclick.min.css"><link rel="stylesheet" href="/clone.css"><link rel="stylesheet" href="/subpages.css"></head><body class="global"><header class="tr-local-bar"><a href="/en">ENGLISH</a><img src="/SiteAssets/images/logo.png" alt="Ziraat Bankası"><a href="/internet-banking">İnternet Şubesi ↗</a></header><main><h1 class="sr-only">T.C. Ziraat Bankası A.Ş.</h1><div class="tr-grid">${trCards}</div><section class="tr-local-content"><h2>Ziraat Bankası</h2><p>Türkçe ana sayfanın yerel görsel kopyası. İşlem gerektiren bağlantılar resmi web sitesinde açılır.</p></section></main><p class="site-note">Yerel site · Bankacılık işlemi yapılmaz.</p></body></html>`
 );
 console.log(
   `Built ${8 + menuSpecs.length + footerSpecs.length + heroSpecs.length} additional public routes from saved HTML.`

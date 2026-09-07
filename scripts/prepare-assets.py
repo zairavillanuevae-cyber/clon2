@@ -19,13 +19,12 @@ for url in sorted(urls):
         continue
     if path.lower().endswith(('.eot', '.svg', '.ttf', '.woff2')) and '/fonts/' in path:
         continue
-    # Only same-origin resources are downloaded; no banking or analytics endpoints.
     output = root / 'public' / path.lstrip('/')
     output.parent.mkdir(parents=True, exist_ok=True)
-    assets.append({'url': 'https://www.ziraatbank.com.tr' + url, 'file': output.relative_to(root).as_posix()})
+    assets.append({'path': url, 'file': output.relative_to(root).as_posix()})
 (root / 'recursos/assets-manifest.json').write_text(json.dumps(assets, indent=2), encoding='utf-8')
 missing = [a for a in assets if not (root / a['file']).exists()]
-config = '\n'.join(f'url = "{a["url"]}"\noutput = "{a["file"]}"\n' for a in missing)
+config = '\n'.join(f'# Missing local asset: {a["file"]}' for a in missing)
 (root / 'recursos/download-assets.conf').write_text(config, encoding='utf-8')
 dest = root / 'public/SiteAssets/css/min/magiclick.min.css'
 dest.parent.mkdir(parents=True, exist_ok=True)
