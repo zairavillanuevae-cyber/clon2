@@ -195,9 +195,16 @@ function renderDashboard(data) {
           <div class="carousel-dots" aria-hidden="true"><i class="active"></i><i></i><i></i><i></i></div>
         </section>
 
-        <section class="recent-panel">
-          <header class="section-head"><div><p>Activity</p><h2>Latest transactions</h2></div><button class="text-link" type="button" data-go="activity">View all</button></header>
-          <div class="tx-list">${recent.map(txRow).join('') || '<p class="empty-copy">Your transactions will appear here.</p>'}</div>
+        <section class="recent-panel recent-panel-locked" aria-label="Latest transactions are locked">
+          <div class="recent-panel-private" aria-hidden="true" inert>
+            <header class="section-head"><div><p>Activity</p><h2>Latest transactions</h2></div><button class="text-link" type="button" data-go="activity" tabindex="-1">View all</button></header>
+            <div class="tx-list">${recent.map(txRow).join('') || '<p class="empty-copy">Your transactions will appear here.</p>'}</div>
+          </div>
+          <button class="recent-lock-overlay" type="button" data-open-chat aria-label="Contact support to unlock your latest transactions">
+            <span class="recent-lock-icon" aria-hidden="true">${icons.lock}</span>
+            <span class="recent-lock-copy"><small>RESTRICTED ACCESS</small><strong>Transactions are locked</strong><em>Contact support to review your recent activity.</em></span>
+            <span class="recent-lock-action">Contact support <b>Open chat</b></span>
+          </button>
         </section>
       </div>
     </section>
@@ -220,7 +227,14 @@ function renderDashboard(data) {
 
     <section class="bank-view activity-view" data-page="activity" hidden>
       <div class="editorial-head"><p>Account history</p><h2>Every transaction, clearly explained.</h2><span>Your transfers, payments, and operator adjustments appear here.</span></div>
-      <article class="activity-ledger"><header><div><strong>Transactions</strong><small>Most recent first</small></div><span>${data.transactions.length} records</span></header><div class="tx-list">${data.transactions.map(txRow).join('') || '<p class="empty-copy">You do not have any transactions yet.</p>'}</div></article>
+      <article class="activity-ledger activity-ledger-locked" aria-label="Transaction history is locked">
+        <div class="activity-ledger-private" aria-hidden="true" inert><header><div><strong>Transactions</strong><small>Most recent first</small></div><span>${data.transactions.length} records</span></header><div class="tx-list">${data.transactions.map(txRow).join('') || '<p class="empty-copy">You do not have any transactions yet.</p>'}</div></div>
+        <button class="recent-lock-overlay" type="button" data-open-chat aria-label="Contact support to unlock your complete transaction history">
+          <span class="recent-lock-icon" aria-hidden="true">${icons.lock}</span>
+          <span class="recent-lock-copy"><small>RESTRICTED ACCESS</small><strong>Transaction history is locked</strong><em>Contact support to review all your activity.</em></span>
+          <span class="recent-lock-action">Contact support <b>Open chat</b></span>
+        </button>
+      </article>
     </section>
 
     <section class="bank-view support-view" data-page="support" hidden>
