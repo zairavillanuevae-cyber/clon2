@@ -36,7 +36,7 @@ test('local HTTP server serves the homepage, assets and health, and rejects non-
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;
-  for (const route of ['/', '/en', '/en/']) {
+  for (const route of ['/']) {
     const response = await fetch(base + route);
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-type'), /text\/html/);
@@ -45,15 +45,18 @@ test('local HTTP server serves the homepage, assets and health, and rejects non-
     assert.doesNotMatch(html, /<script[^>]+src="https?:/);
     assert.doesNotMatch(html, /__VIEWSTATE|__EVENTVALIDATION/);
   }
+  const removedLanguagePrefix = '/' + 'en';
+  assert.equal((await fetch(base + removedLanguagePrefix)).status, 404);
+  assert.equal((await fetch(base + `${removedLanguagePrefix}/`)).status, 404);
   assert.deepEqual(await (await fetch(base + '/health')).json(), { status: 'ok' });
   const pages = new Map([
-    ['/en/product-and-service-fees', 'Product and Service Fees'],
-    ['/en/our-bank', 'Our Bank'],
-    ['/en/investor-relations', 'Investor Relations'],
-    ['/en/digital-banking', 'Digital Banking'],
-    ['/en/retail', 'Retail'],
-    ['/en/commercial', 'Commercial'],
-    ['/en/corporate', 'Corporate'],
+    ['/product-and-service-fees', 'Product and Service Fees'],
+    ['/our-bank', 'Our Bank'],
+    ['/investor-relations', 'Investor Relations'],
+    ['/digital-banking', 'Digital Banking'],
+    ['/retail', 'Retail'],
+    ['/commercial', 'Commercial'],
+    ['/corporate', 'Corporate'],
     ['/tr', 'Ｚiraat Bankası']
   ]);
   for (const [route, heading] of pages) {
@@ -62,12 +65,12 @@ test('local HTTP server serves the homepage, assets and health, and rejects non-
     assert.match(await response.text(), new RegExp(heading), route);
   }
   const menuPages = [
-    ['/en/retail', ['accounts', 'loans', 'cards', 'payments', 'services', 'insurance-pension', 'investment']],
+    ['/retail', ['accounts', 'loans', 'cards', 'payments', 'services', 'insurance-pension', 'investment']],
     [
-      '/en/commercial',
+      '/commercial',
       ['accounts', 'cards', 'loans', 'foreign-trade', 'cash-management', 'pos-services', 'investment', 'agriculture']
     ],
-    ['/en/corporate', ['accounts', 'loans', 'foreign-trade', 'cards', 'cash-management', 'investment', 'agriculture']]
+    ['/corporate', ['accounts', 'loans', 'foreign-trade', 'cards', 'cash-management', 'investment', 'agriculture']]
   ];
   for (const [section, slugs] of menuPages)
     for (const slug of slugs) {
@@ -75,11 +78,11 @@ test('local HTTP server serves the homepage, assets and health, and rejects non-
       assert.equal(response.status, 200, `${section}/${slug}`);
       assert.match(await response.text(), /clone-(?:card-grid|detail)/, `${section}/${slug}`);
     }
-  const home = await (await fetch(base + '/en')).text();
-  assert.match(home, /data-src="\/en\/Banners\/qr-red\.png"/);
-  assert.match(home, /data-mobile-src="\/en\/PublishingImages\/qr-red-mobile\.png"/);
-  assert.doesNotMatch(home, /data-src="\/en\/Banners\/QR\.jpg"/);
-  for (const asset of ['/en/Banners/qr-red.png', '/en/PublishingImages/qr-red-mobile.png']) {
+  const home = await (await fetch(base + '/')).text();
+  assert.match(home, /data-src="\/Banners\/qr-red\.png"/);
+  assert.match(home, /data-mobile-src="\/PublishingImages\/qr-red-mobile\.png"/);
+  assert.doesNotMatch(home, /data-src="\/Banners\/QR\.jpg"/);
+  for (const asset of ['/Banners/qr-red.png', '/PublishingImages/qr-red-mobile.png']) {
     assert.equal((await fetch(base + asset, { method: 'HEAD' })).status, 200, asset);
   }
   for (const [section, slugs] of menuPages)
@@ -87,21 +90,21 @@ test('local HTTP server serves the homepage, assets and health, and rejects non-
       assert.match(home, new RegExp(`href="${section}/${slug}"`), `${section}/${slug}`);
     }
   const footerPages = [
-    ['/en/our-bank/about-us/ziraat-finans-group/domestic-subsidiaries', 'Local Subsidiaries'],
+    ['/our-bank/about-us/ziraat-finans-group/domestic-subsidiaries', 'Local Subsidiaries'],
     [
-      '/en/our-bank/about-us/ziraat-finans-group/subsidiaries-abroad-overseas-branches-and-representative-offices',
+      '/our-bank/about-us/ziraat-finans-group/subsidiaries-abroad-overseas-branches-and-representative-offices',
       'Subsidiaries Abroad'
     ],
-    ['/en/our-bank/press-room/news-announcements', 'News &amp; Announcements'],
-    ['/en/calculation-tools', 'Calculation Tools'],
-    ['/en/sitemap', 'Site Map'],
-    ['/en/faq', 'FAQ'],
+    ['/our-bank/press-room/news-announcements', 'News &amp; Announcements'],
+    ['/calculation-tools', 'Calculation Tools'],
+    ['/sitemap', 'Site Map'],
+    ['/faq', 'FAQ'],
     ['/tr/bankamiz/ziraatten-duyurular/duyurular/zamanasimina-ugrayan-mevduat-ve-emanet-hesaplari', 'Time Out Account'],
-    ['/en/calculation-tools/iban', 'IBAN'],
-    ['/en/legal-notice', 'Legal Notice'],
-    ['/en/contact-us/branches-atms', 'Branches &amp; ATMs'],
-    ['/en/contact-us/contact-form', 'Contact Form'],
-    ['/en/our-bank/announcements/disclosure-of-protection-of-personal-data', 'Personal Data Protection']
+    ['/calculation-tools/iban', 'IBAN'],
+    ['/legal-notice', 'Legal Notice'],
+    ['/contact-us/branches-atms', 'Branches &amp; ATMs'],
+    ['/contact-us/contact-form', 'Contact Form'],
+    ['/our-bank/announcements/disclosure-of-protection-of-personal-data', 'Personal Data Protection']
   ];
   for (const [route, heading] of footerPages) {
     const response = await fetch(base + route);
@@ -109,18 +112,18 @@ test('local HTTP server serves the homepage, assets and health, and rejects non-
     assert.match(await response.text(), new RegExp(heading), route);
     assert.match(home, new RegExp(`href="${route}"`), route);
   }
-  const sitemap = await (await fetch(base + '/en/sitemap')).text();
+  const sitemap = await (await fetch(base + '/sitemap')).text();
   const sitemapLinks = [...sitemap.matchAll(/<a\b[^>]*\bhref=(["'])(.*?)\1/gi)].map((match) => match[2]);
   assert.ok(sitemapLinks.length > 100, 'sitemap should preserve its complete link list');
   assert.ok(
-    sitemapLinks.every((href) => href === '/en'),
+    sitemapLinks.every((href) => href === '/'),
     'every sitemap link should return to the homepage'
   );
   assert.doesNotMatch(sitemap, /<a\b[^>]*\btarget=["']_blank["']/i);
   const heroPages = [
-    ['/en/retail/services/western-union', 'Western Union', true],
-    ['/en/digital-banking/mobile-banking/ziraat-mobil', 'Ｚiraat Mobil', true],
-    ['/en/digital-banking/mobile-banking/ziraat-mobile-corporate', 'Ｚiraat Mobile Corporate', false]
+    ['/retail/services/western-union', 'Western Union', true],
+    ['/digital-banking/mobile-banking/ziraat-mobil', 'Ｚiraat Mobil', true],
+    ['/digital-banking/mobile-banking/ziraat-mobile-corporate', 'Ｚiraat Mobile Corporate', false]
   ];
   for (const [route, heading, linkedFromHome] of heroPages) {
     const response = await fetch(base + route);
@@ -134,8 +137,8 @@ test('local HTTP server serves the homepage, assets and health, and rejects non-
   }
   assert.equal((await fetch(base + '/recursos/original.html')).status, 404);
   assert.equal((await fetch(base + '/%2e%2e%5cpackage.json')).status, 403);
-  assert.equal((await fetch(base + '/en', { method: 'POST' })).status, 405);
-  assert.equal((await fetch(base + '/en', { method: 'HEAD' })).status, 200);
+  assert.equal((await fetch(base + '/', { method: 'POST' })).status, 405);
+  assert.equal((await fetch(base + '/', { method: 'HEAD' })).status, 200);
   const manifest = JSON.parse(await readFile(new URL('../recursos/assets-manifest.json', import.meta.url)));
   for (const asset of manifest) {
     const response = await fetch(base + '/' + asset.file.replace('public/', ''), { method: 'HEAD' });

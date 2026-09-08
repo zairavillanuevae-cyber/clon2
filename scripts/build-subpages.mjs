@@ -1,57 +1,63 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 const root = new URL('../', import.meta.url);
+const englishPrefix = '/' + 'en';
+const removeEnglishPrefix = (value) =>
+  value
+    .replaceAll(`${englishPrefix}/`, '/')
+    .replaceAll(`"${englishPrefix}"`, '"/"')
+    .replaceAll(`'${englishPrefix}'`, "'/'");
 const menuSpecs = [
-  ['retail-accounts', 'Accounts', '/en/retail/accounts', '/en/retail/accounts'],
-  ['retail-loans', 'Loans', '/en/retail/loans', '/en/retail/loans'],
-  ['retail-cards', 'Cards', '/en/retail/cards', '/en/retail/cards'],
-  ['retail-payments', 'Payments', '/en/retail/payments', '/en/retail/payments'],
-  ['retail-services', 'Services', '/en/retail/services', '/en/retail/services'],
-  ['retail-insurance-pension', 'Insurance & Pension', '/en/retail/insurance-pension', '/en/retail/insurance-pension'],
-  ['retail-investment', 'Investment', '/en/retail/investment', '/en/retail/investment'],
-  ['sme-accounts', 'Accounts', '/en/sme/accounts', '/en/commercial/accounts'],
-  ['sme-cards', 'Cards', '/en/sme/cards', '/en/commercial/cards'],
-  ['sme-loans', 'Loans', '/en/sme/loans', '/en/commercial/loans'],
-  ['sme-foreign-trade', 'Foreign Trade', '/en/sme/foreign-trade', '/en/commercial/foreign-trade'],
-  ['sme-cash-management', 'Cash Management', '/en/sme/cash-management', '/en/commercial/cash-management'],
-  ['sme-pos-services', 'POS Services', '/en/sme/pos-services', '/en/commercial/pos-services'],
-  ['sme-investment', 'Investment', '/en/sme/investment', '/en/commercial/investment'],
-  ['sme-agriculture', 'Agriculture', '/en/sme/agriculture', '/en/commercial/agriculture'],
-  ['corporate-accounts', 'Accounts', '/en/corporate/accounts', '/en/corporate/accounts'],
-  ['corporate-loans', 'Loans', '/en/corporate/loans', '/en/corporate/loans'],
-  ['corporate-foreign-trade', 'Foreign Trade', '/en/corporate/foreign-trade', '/en/corporate/foreign-trade'],
-  ['corporate-cards', 'Cards', '/en/corporate/cards', '/en/corporate/cards'],
-  ['corporate-cash-management', 'Cash Management', '/en/corporate/cash-management', '/en/corporate/cash-management'],
-  ['corporate-investment', 'Investment', '/en/corporate/investment', '/en/corporate/investment'],
-  ['corporate-agriculture', 'Agriculture', '/en/corporate/agriculture', '/en/corporate/agriculture']
+  ['retail-accounts', 'Accounts', '/retail/accounts', '/retail/accounts'],
+  ['retail-loans', 'Loans', '/retail/loans', '/retail/loans'],
+  ['retail-cards', 'Cards', '/retail/cards', '/retail/cards'],
+  ['retail-payments', 'Payments', '/retail/payments', '/retail/payments'],
+  ['retail-services', 'Services', '/retail/services', '/retail/services'],
+  ['retail-insurance-pension', 'Insurance & Pension', '/retail/insurance-pension', '/retail/insurance-pension'],
+  ['retail-investment', 'Investment', '/retail/investment', '/retail/investment'],
+  ['sme-accounts', 'Accounts', '/sme/accounts', '/commercial/accounts'],
+  ['sme-cards', 'Cards', '/sme/cards', '/commercial/cards'],
+  ['sme-loans', 'Loans', '/sme/loans', '/commercial/loans'],
+  ['sme-foreign-trade', 'Foreign Trade', '/sme/foreign-trade', '/commercial/foreign-trade'],
+  ['sme-cash-management', 'Cash Management', '/sme/cash-management', '/commercial/cash-management'],
+  ['sme-pos-services', 'POS Services', '/sme/pos-services', '/commercial/pos-services'],
+  ['sme-investment', 'Investment', '/sme/investment', '/commercial/investment'],
+  ['sme-agriculture', 'Agriculture', '/sme/agriculture', '/commercial/agriculture'],
+  ['corporate-accounts', 'Accounts', '/corporate/accounts', '/corporate/accounts'],
+  ['corporate-loans', 'Loans', '/corporate/loans', '/corporate/loans'],
+  ['corporate-foreign-trade', 'Foreign Trade', '/corporate/foreign-trade', '/corporate/foreign-trade'],
+  ['corporate-cards', 'Cards', '/corporate/cards', '/corporate/cards'],
+  ['corporate-cash-management', 'Cash Management', '/corporate/cash-management', '/corporate/cash-management'],
+  ['corporate-investment', 'Investment', '/corporate/investment', '/corporate/investment'],
+  ['corporate-agriculture', 'Agriculture', '/corporate/agriculture', '/corporate/agriculture']
 ];
 const footerSpecs = [
   [
     'footer-domestic-subsidiaries',
     'Local Subsidiaries',
-    '/en/our-bank/about-us/ziraat-finans-group/domestic-subsidiaries',
-    '/en/our-bank/about-us/ziraat-finans-group/domestic-subsidiaries',
+    '/our-bank/about-us/ziraat-finans-group/domestic-subsidiaries',
+    '/our-bank/about-us/ziraat-finans-group/domestic-subsidiaries',
     'Our Bank',
-    '/en/our-bank'
+    '/our-bank'
   ],
   [
     'footer-subsidiaries-abroad',
     'Subsidiaries Abroad, Overseas Branches and Representative Offices',
-    '/en/our-bank/about-us/ziraat-finans-group/subsidiaries-abroad-overseas-branches-and-representative-offices',
-    '/en/our-bank/about-us/ziraat-finans-group/subsidiaries-abroad-overseas-branches-and-representative-offices',
+    '/our-bank/about-us/ziraat-finans-group/subsidiaries-abroad-overseas-branches-and-representative-offices',
+    '/our-bank/about-us/ziraat-finans-group/subsidiaries-abroad-overseas-branches-and-representative-offices',
     'Our Bank',
-    '/en/our-bank'
+    '/our-bank'
   ],
   [
     'footer-announcements',
     'News & Announcements',
-    '/en/our-bank/press-room/news-announcements',
-    '/en/our-bank/press-room/news-announcements',
+    '/our-bank/press-room/news-announcements',
+    '/our-bank/press-room/news-announcements',
     'Our Bank',
-    '/en/our-bank'
+    '/our-bank'
   ],
-  ['footer-calculation-tools', 'Calculation Tools', '/en/calculation-tools', '/en/calculation-tools'],
-  ['footer-sitemap', 'Site Map', '/en/sitemap', '/en/sitemap'],
-  ['footer-faq', 'FAQ', '/en/faq', '/en/faq'],
+  ['footer-calculation-tools', 'Calculation Tools', '/calculation-tools', '/calculation-tools'],
+  ['footer-sitemap', 'Site Map', '/sitemap', '/sitemap'],
+  ['footer-faq', 'FAQ', '/faq', '/faq'],
   [
     'footer-time-out-account',
     'Time Out Account',
@@ -61,63 +67,64 @@ const footerSpecs = [
   [
     'footer-iban',
     'IBAN',
-    '/en/calculation-tools/iban',
-    '/en/calculation-tools/iban',
+    '/calculation-tools/iban',
+    '/calculation-tools/iban',
     'Calculation Tools',
-    '/en/calculation-tools'
+    '/calculation-tools'
   ],
-  ['footer-legal-notice', 'Legal Notice', '/en/legal-notice', '/en/legal-notice'],
-  ['footer-branches-atms', 'Branches & ATMs', '/en/contact-us/branches-atms', '/en/contact-us/branches-atms'],
-  ['footer-contact-form', 'Contact Form', '/en/contact-us/contact-form', '/en/contact-us/contact-form'],
+  ['footer-legal-notice', 'Legal Notice', '/legal-notice', '/legal-notice'],
+  ['footer-branches-atms', 'Branches & ATMs', '/contact-us/branches-atms', '/contact-us/branches-atms'],
+  ['footer-contact-form', 'Contact Form', '/contact-us/contact-form', '/contact-us/contact-form'],
   [
     'footer-personal-data-protection',
     'Personal Data Protection',
-    '/en/our-bank/announcements/disclosure-of-protection-of-personal-data',
-    '/en/our-bank/announcements/disclosure-of-protection-of-personal-data',
+    '/our-bank/announcements/disclosure-of-protection-of-personal-data',
+    '/our-bank/announcements/disclosure-of-protection-of-personal-data',
     'Our Bank',
-    '/en/our-bank'
+    '/our-bank'
   ]
 ];
 const heroSpecs = [
   [
     'hero-western-union',
     'Western Union',
-    '/en/retail/services/western-union',
-    '/en/retail/services/western-union',
+    '/retail/services/western-union',
+    '/retail/services/western-union',
     'Services',
-    '/en/retail/services'
+    '/retail/services'
   ],
   [
     'hero-ziraat-mobile',
     'Ｚiraat Mobil',
-    '/en/digital-banking/mobile-banking/ziraat-mobil',
-    '/en/digital-banking/mobile-banking/ziraat-mobil',
+    '/digital-banking/mobile-banking/ziraat-mobil',
+    '/digital-banking/mobile-banking/ziraat-mobil',
     'Digital Banking',
-    '/en/digital-banking'
+    '/digital-banking'
   ],
   [
     'hero-ziraat-mobile-corporate',
     'Ｚiraat Mobile Corporate',
-    '/en/digital-banking/mobile-banking/ziraat-mobile-corporate',
-    '/en/digital-banking/mobile-banking/ziraat-mobile-corporate',
+    '/digital-banking/mobile-banking/ziraat-mobile-corporate',
+    '/digital-banking/mobile-banking/ziraat-mobile-corporate',
     'Digital Banking',
-    '/en/digital-banking'
+    '/digital-banking'
   ]
 ];
 const routes = new Map([
   ...menuSpecs.map(([, , officialRoute, localRoute]) => [officialRoute, localRoute]),
   ...footerSpecs.map(([, , officialRoute, localRoute]) => [officialRoute, localRoute]),
   ...heroSpecs.map(([, , officialRoute, localRoute]) => [officialRoute, localRoute]),
-  ['/en/product-and-service-fees', '/en/product-and-service-fees'],
-  ['/en/our-bank', '/en/our-bank'],
-  ['/en/investor-relations', '/en/investor-relations'],
-  ['/en/digital-banking', '/en/digital-banking'],
-  ['/en/retail', '/en/retail'],
-  ['/en/sme', '/en/commercial'],
-  ['/en/corporate', '/en/corporate'],
+  ['/product-and-service-fees', '/product-and-service-fees'],
+  ['/our-bank', '/our-bank'],
+  ['/investor-relations', '/investor-relations'],
+  ['/digital-banking', '/digital-banking'],
+  ['/retail', '/retail'],
+  ['/sme', '/commercial'],
+  ['/corporate', '/corporate'],
+  ['/internet-banking', '/internet-banking'],
   ['/tr', '/tr']
 ]);
-const localRoutes = new Set(['/en', ...routes.values()]);
+const localRoutes = new Set(['/', ...routes.values()]);
 function neutralizeExternalLinks(markup) {
   return markup.replace(/<a\b[^>]*>/gi, (tag) => {
     const href = tag.match(/\bhref=(['"])(https?:\/\/[^'"]*)\1/i);
@@ -125,7 +132,8 @@ function neutralizeExternalLinks(markup) {
     let localHref = '';
     try {
       const parsed = new URL(href[2]);
-      if (/^\/(?:en|tr)(?:\/|$)/i.test(parsed.pathname)) localHref = parsed.pathname + parsed.search + parsed.hash;
+      const pathname = parsed.pathname.replace(/\/$/, '') || '/';
+      if (localRoutes.has(pathname)) localHref = parsed.pathname + parsed.search + parsed.hash;
       else if (/^\/Transactions\//i.test(parsed.pathname)) localHref = '/internet-banking';
     } catch {}
     return tag
@@ -136,12 +144,12 @@ function neutralizeExternalLinks(markup) {
 }
 function neutralizeUnavailableLocalLinks(markup) {
   return markup.replace(/<a\b[^>]*>/gi, (tag) => {
-    const href = tag.match(/\bhref=(['"])(\/(?:en|tr)(?:\/[^'"]*)?)\1/i);
+    const href = tag.match(/\bhref=(['"])(\/[^'"]*)\1/i);
     if (!href) return tag;
     const pathname = href[2].split(/[?#]/, 1)[0].replace(/\/$/, '') || '/';
     if (localRoutes.has(pathname)) return tag;
     return tag
-      .replace(/\bhref=(['"])\/(?:en|tr)(?:\/[^'"]*)?\1/i, 'href=""')
+      .replace(/\bhref=(['"])\/[^'"]*\1/i, 'href=""')
       .replace(/\s+target=(['"])_blank\1/gi, '')
       .replace(/\s+rel=(['"])noopener noreferrer\1/gi, '');
   });
@@ -163,13 +171,13 @@ const header =
   (home.match(/<header class="header"[\s\S]*?<\/header>/)?.[0] || '');
 const footer = home.slice(home.indexOf('<footer class="section'), home.indexOf('</footer>') + 9);
 const specs = [
-  ['product-and-service-fees', 'Product and Service Fees', '/en/product-and-service-fees'],
-  ['our-bank', 'Our Bank', '/en/our-bank'],
-  ['investor-relations', 'Investor Relations', '/en/investor-relations'],
-  ['digital-banking', 'Digital Banking', '/en/digital-banking'],
-  ['retail', 'Retail', '/en/retail'],
-  ['commercial', 'Commercial', '/en/commercial'],
-  ['corporate', 'Corporate', '/en/corporate']
+  ['product-and-service-fees', 'Product and Service Fees', '/product-and-service-fees'],
+  ['our-bank', 'Our Bank', '/our-bank'],
+  ['investor-relations', 'Investor Relations', '/investor-relations'],
+  ['digital-banking', 'Digital Banking', '/digital-banking'],
+  ['retail', 'Retail', '/retail'],
+  ['commercial', 'Commercial', '/commercial'],
+  ['corporate', 'Corporate', '/corporate']
 ];
 const esc = (s) =>
   String(s ?? '').replace(
@@ -256,16 +264,16 @@ function content(raw, title, sourceRoute) {
     )
     .join('')}</div>`;
 }
-async function buildPage(file, title, route, parentTitle, parentRoute = '/en', sourceRoute = route) {
-  const raw = await readFile(new URL(`recursos/pages/${file}.html`, root), 'utf8');
+async function buildPage(file, title, route, parentTitle, parentRoute = '/', sourceRoute = route) {
+  const raw = removeEnglishPrefix(await readFile(new URL(`recursos/pages/${file}.html`, root), 'utf8'));
   const crumbs = parentTitle ? `<a href="${parentRoute}">${esc(parentTitle)}</a><span> / </span>` : '';
-  const sitemap = route === '/en/sitemap';
+  const sitemap = route === '/sitemap';
   const clientScript = sitemap ? '' : '<script type="module" src="/subpages.js"></script>';
-  const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} — Local Site</title><meta name="robots" content="noindex,nofollow"><link rel="stylesheet" href="/SiteAssets/css/min/magiclick.min.css"><link rel="stylesheet" href="/clone.css"><link rel="stylesheet" href="/subpages.css">${clientScript}</head><body class="sub-page global en"><a class="clone-skip" href="#ContentSection">Skip to content</a>${header}<main class="global-container zb-w landing"><div class="sub-page-title"><a href="${parentTitle ? parentRoute : '/en'}" class="oval-btn back-btn icon-left-arrow" aria-label="Back"></a><h1>${esc(title)}</h1><div class="breadcrumb"><a href="/en">Main</a><span> / </span>${crumbs}<span>${esc(title)}</span></div></div><div id="ContentSection">${content(raw, title, sourceRoute)}</div></main>${footer}<p class="site-note"></p></body></html>`;
+  const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} — Local Site</title><meta name="robots" content="noindex,nofollow"><link rel="stylesheet" href="/SiteAssets/css/min/magiclick.min.css"><link rel="stylesheet" href="/clone.css"><link rel="stylesheet" href="/subpages.css">${clientScript}</head><body class="sub-page global en"><a class="clone-skip" href="#ContentSection">Skip to content</a>${header}<main class="global-container zb-w landing"><div class="sub-page-title"><a href="${parentTitle ? parentRoute : '/'}" class="oval-btn back-btn icon-left-arrow" aria-label="Back"></a><h1>${esc(title)}</h1><div class="breadcrumb"><a href="/">Main</a><span> / </span>${crumbs}<span>${esc(title)}</span></div></div><div id="ContentSection">${content(raw, title, sourceRoute)}</div></main>${footer}<p class="site-note"></p></body></html>`;
   let output = localize(page);
   if (sitemap)
     output = output
-      .replace(/(<a\b[^>]*\bhref=)(["'])[^"']*\2/gi, '$1"/en"')
+      .replace(/(<a\b[^>]*\bhref=)(["'])[^"']*\2/gi, '$1"/"')
       .replace(/\s+target=(["'])_blank\1/gi, '')
       .replace(/\s+rel=(["'])noopener noreferrer\1/gi, '');
   const dir = new URL(`public${route}/`, root);
@@ -274,9 +282,9 @@ async function buildPage(file, title, route, parentTitle, parentRoute = '/en', s
 }
 for (const [file, title, route] of specs) await buildPage(file, title, route);
 for (const [file, title, sourceRoute, route] of menuSpecs) {
-  const parent = route.startsWith('/en/retail/')
+  const parent = route.startsWith('/retail/')
     ? 'Retail'
-    : route.startsWith('/en/commercial/')
+    : route.startsWith('/commercial/')
       ? 'Commercial'
       : 'Corporate';
   const parentRoute = route.slice(0, route.lastIndexOf('/'));
@@ -300,7 +308,7 @@ const trDir = new URL('public/tr/', root);
 await mkdir(trDir, { recursive: true });
 await writeFile(
   new URL('index.html', trDir),
-  `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ｚiraat Bankası — Yerel Site</title><meta name="robots" content="noindex,nofollow"><link rel="stylesheet" href="/SiteAssets/css/min/magiclick.min.css"><link rel="stylesheet" href="/clone.css"><link rel="stylesheet" href="/subpages.css"></head><body class="global"><header class="tr-local-bar"><a href="/en">ENGLISH</a><img src="/SiteAssets/images/logo.png" alt="Educational demo emblem"><a href="/internet-banking">İnternet Şubesi ↗</a></header><main><h1 class="sr-only">T.C. Ｚiraat Bankası A.Ş.</h1><div class="tr-grid">${trCards}</div><section class="tr-local-content"><h2>Ｚiraat Bankası</h2><p>Türkçe ana sayfanın yerel görsel kopyası. İşlem gerektiren bağlantılar resmi web sitesinde açılır.</p></section></main><p class="site-note">Yerel site · Bankacılık işlemi yapılmaz.</p></body></html>`
+  `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ｚiraat Bankası — Yerel Site</title><meta name="robots" content="noindex,nofollow"><link rel="stylesheet" href="/SiteAssets/css/min/magiclick.min.css"><link rel="stylesheet" href="/clone.css"><link rel="stylesheet" href="/subpages.css"></head><body class="global"><header class="tr-local-bar"><a href="/">ENGLISH</a><img src="/SiteAssets/images/logo.png" alt="Educational demo emblem"><a href="/internet-banking">İnternet Şubesi ↗</a></header><main><h1 class="sr-only">T.C. Ｚiraat Bankası A.Ş.</h1><div class="tr-grid">${trCards}</div><section class="tr-local-content"><h2>Ｚiraat Bankası</h2><p>Türkçe ana sayfanın yerel görsel kopyası. İşlem gerektiren bağlantılar resmi web sitesinde açılır.</p></section></main><p class="site-note">Yerel site · Bankacılık işlemi yapılmaz.</p></body></html>`
 );
 console.log(
   `Built ${8 + menuSpecs.length + footerSpecs.length + heroSpecs.length} additional public routes from saved HTML.`

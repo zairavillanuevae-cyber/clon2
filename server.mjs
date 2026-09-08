@@ -335,7 +335,7 @@ export function createServer(options = {}) {
         return res.end('Method not allowed');
       }
       let staticPath = pathname;
-      if (['/', '/en', '/en/'].includes(staticPath)) staticPath = '/index.html';
+      if (staticPath === '/') staticPath = '/index.html';
       if (['/operador', '/operador/', '/operator', '/operator/'].includes(staticPath))
         staticPath = '/operador/index.html';
       if (['/internet-banking', '/internet-banking/'].includes(staticPath)) staticPath = '/internet-banking/index.html';
@@ -382,7 +382,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const store = await createChatStore();
   const bankStore = await createBankStore();
   const server = createServer({ store, bankStore });
-  server.listen(port, host, () => console.log(`App ready: http://localhost:${port}/en · operator: /operator`));
+  server.listen(port, host, () => console.log(`App ready: http://localhost:${port}/ · operator: /operator`));
   const shutdown = () =>
     server.close(async () => {
       await Promise.all([store.close(), bankStore.close()]);

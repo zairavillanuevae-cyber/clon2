@@ -3,6 +3,11 @@ import path from 'node:path';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const pagesDir = path.join(projectRoot, 'recursos', 'pages');
+const englishPrefix = '/' + 'en';
+const localAssetPath = (assetPath) =>
+  assetPath === englishPrefix || assetPath.startsWith(`${englishPrefix}/`)
+    ? assetPath.slice(englishPrefix.length) || '/'
+    : assetPath;
 const sourceFiles = (await readdir(pagesDir)).filter((name) =>
   /^(retail|sme|corporate|footer|hero)-.*\.html$/.test(name)
 );
@@ -13,10 +18,10 @@ for (const filename of sourceFiles) {
   const navigationMatch = html.match(/var navigationContainer=({.*?});<\/script>/s);
   if (navigationMatch) {
     const items = JSON.parse(navigationMatch[1]).Navigation?.Childs || [];
-    for (const item of items) if (item.Img?.startsWith('/')) assetPaths.add(item.Img);
+    for (const item of items) if (item.Img?.startsWith('/')) assetPaths.add(localAssetPath(item.Img));
   } else {
     const image = html.match(/class="content-img"[\s\S]*?<img[^>]+src="([^"]+)"/i)?.[1];
-    if (image?.startsWith('/')) assetPaths.add(image);
+    if (image?.startsWith('/')) assetPaths.add(localAssetPath(image));
   }
   if (html.includes('/SiteAssets/images/worldmap.png')) assetPaths.add('/SiteAssets/images/worldmap.png');
 }

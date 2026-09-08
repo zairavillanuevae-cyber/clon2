@@ -2,12 +2,17 @@ import { readFile, writeFile, mkdir, stat, copyFile } from 'node:fs/promises';
 
 const root = new URL('../', import.meta.url);
 const source = await readFile(new URL('recursos/original.html', root), 'utf8');
+const englishPrefix = '/' + 'en';
 let body = source.slice(source.indexOf('<div class="mobile-navigation'), source.indexOf('</footer>') + 9);
+body = body
+  .replaceAll(`${englishPrefix}/`, '/')
+  .replaceAll(`"${englishPrefix}"`, '"/"')
+  .replaceAll(`'${englishPrefix}'`, "'/'");
 body = body.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
 body = body.replace(/<div class="homepage-chatbot">[\s\S]*?(?=<div style="display:none;">)/, '');
 body = body.replace(/\s+on\w+="[^"]*"/g, '');
 body = body.replace(/<input\b[^>]*type="hidden"[^>]*>/gi, '');
-body = body.replace(/href="(\/en[^"#]*|\/tr[^"#]*)"/g, (_, url) => `href="${url}"`);
+body = body.replace(/href="(\/tr[^"#]*)"/g, (_, url) => `href="${url}"`);
 body = body.replace(/href="javascript:;"/g, 'href="#"');
 body = body.replace(/class="langUrl" href="#"/g, 'class="langUrl" href="/tr"');
 body = body.replace(/href="#" class="langUrl"/g, 'href="/tr" class="langUrl"');
@@ -15,10 +20,14 @@ body = body.replace(
   /<div class="item box-height owl-lazy default"/,
   '<div class="item box-height owl-lazy default active"'
 );
-body = body.replace(/data-src="(\/en\/Banners\/[^"]+)"/g, 'data-src="$1" style="background-image:url(\'$1\')"');
+body = body.replace(/data-src="(\/Banners\/[^"]+)"/g, 'data-src="$1" style="background-image:url(\'$1\')"');
+body = body
+  .replaceAll('/Banners/QR.jpg', '/Banners/qr-red.png')
+  .replaceAll('/PublishingImages/QR-mobile.png', '/PublishingImages/qr-red-mobile.png');
 body = body.replace(/(<img[^>]+)src="\/SiteAssets\/images\/transparent.png" data-src="([^"]+)"/g, '$1src="$2"');
 body = body.replace(/alt="Ｚiraat Bankası Logosu"/g, 'alt="Educational demo emblem"');
 body = body.replace(/(id="home-icon-[^"]+">)/g, '$1<span class="animation" aria-hidden="true"><span></span></span>');
+body = body.replace(/(<div class="footer-contact">[\s\S]*?<p>)[^<]*(<\/p>)/, '$1$2');
 body += '</div></div>';
 const cookie = (source.match(/<div class="cookie-box[\s\S]*?<\/div>/)?.[0] || '').replace(
   /href="(\/tr[^"]+)"/g,
@@ -31,8 +40,9 @@ function neutralizeExternalLinks(markup) {
     let localHref = '';
     try {
       const parsed = new URL(href[2]);
-      if (/^\/(?:en|tr)(?:\/|$)/i.test(parsed.pathname)) localHref = parsed.pathname + parsed.search + parsed.hash;
-      else if (/^\/Transactions\//i.test(parsed.pathname)) localHref = '/internet-banking';
+      if (/^\/Transactions\//i.test(parsed.pathname)) localHref = '/internet-banking';
+      else if (/ziraatbank\.com\.tr$/i.test(parsed.hostname) && parsed.pathname.startsWith('/'))
+        localHref = parsed.pathname + parsed.search + parsed.hash;
     } catch {}
     return tag
       .replace(/\bhref=(['"])https?:\/\/[^'"]*\1/i, `href="${localHref}"`)

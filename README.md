@@ -10,7 +10,7 @@ Node.js 22.8 or newer is required.
 npm start
 ```
 
-Open http://localhost:3000/en. The customer banking dashboard is available at http://localhost:3000/internet-banking and the operations dashboard at http://localhost:3000/operator. The legacy `/operador` route remains available for compatibility.
+Open http://localhost:3000/. The customer banking dashboard is available at http://localhost:3000/internet-banking and the operations dashboard at http://localhost:3000/operator. The legacy `/operador` route remains available for compatibility.
 
 The operator dashboard is protected by `OPERATOR_KEY`. Initial customer credentials are configured with `BANK_CUSTOMER_USER` and `BANK_CUSTOMER_PASSWORD`. Copy `.env.example` into your environment before deployment; Node does not load `.env` automatically.
 
@@ -46,7 +46,7 @@ When `DATABASE_URL` is available, balances and messages are persisted in Postgre
 
 ## Public-site content
 
-The `/en` homepage includes the carousel, keyboard and touch controls, menus, local search, calculators, footer destinations, cookie notice, and support chat. Product and information routes are generated from the preserved public English pages in `recursos/pages`.
+The `/` homepage includes the carousel, keyboard and touch controls, menus, local search, calculators, footer destinations, cookie notice, and support chat. Product and information routes are generated from the preserved public English pages in `recursos/pages`.
 
 Exchange rates are a reference snapshot and are not live. Calculators are mathematical demonstrations and do not represent a banking offer.
 
