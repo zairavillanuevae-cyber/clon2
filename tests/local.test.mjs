@@ -76,6 +76,12 @@ test('local HTTP server serves the homepage, assets and health, and rejects non-
       assert.match(await response.text(), /clone-(?:card-grid|detail)/, `${section}/${slug}`);
     }
   const home = await (await fetch(base + '/en')).text();
+  assert.match(home, /data-src="\/en\/Banners\/qr-red\.png"/);
+  assert.match(home, /data-mobile-src="\/en\/PublishingImages\/qr-red-mobile\.png"/);
+  assert.doesNotMatch(home, /data-src="\/en\/Banners\/QR\.jpg"/);
+  for (const asset of ['/en/Banners/qr-red.png', '/en/PublishingImages/qr-red-mobile.png']) {
+    assert.equal((await fetch(base + asset, { method: 'HEAD' })).status, 200, asset);
+  }
   for (const [section, slugs] of menuPages)
     for (const slug of slugs) {
       assert.match(home, new RegExp(`href="${section}/${slug}"`), `${section}/${slug}`);
@@ -112,15 +118,19 @@ test('local HTTP server serves the homepage, assets and health, and rejects non-
   );
   assert.doesNotMatch(sitemap, /<a\b[^>]*\btarget=["']_blank["']/i);
   const heroPages = [
-    ['/en/retail/services/western-union', 'Western Union'],
-    ['/en/digital-banking/mobile-banking/ziraat-mobil', 'Ｚiraat Mobil'],
-    ['/en/digital-banking/mobile-banking/ziraat-mobile-corporate', 'Ｚiraat Mobile Corporate']
+    ['/en/retail/services/western-union', 'Western Union', true],
+    ['/en/digital-banking/mobile-banking/ziraat-mobil', 'Ｚiraat Mobil', true],
+    ['/en/digital-banking/mobile-banking/ziraat-mobile-corporate', 'Ｚiraat Mobile Corporate', false]
   ];
-  for (const [route, heading] of heroPages) {
+  for (const [route, heading, linkedFromHome] of heroPages) {
     const response = await fetch(base + route);
     assert.equal(response.status, 200, route);
     assert.match(await response.text(), new RegExp(`<h1>${heading}</h1>`), route);
-    assert.match(home, new RegExp(`href="${route}"`), route);
+    if (linkedFromHome) {
+      assert.match(home, new RegExp(`href="${route}"`), route);
+    } else {
+      assert.doesNotMatch(home, new RegExp(`href="${route}"`), route);
+    }
   }
   assert.equal((await fetch(base + '/recursos/original.html')).status, 404);
   assert.equal((await fetch(base + '/%2e%2e%5cpackage.json')).status, 403);
