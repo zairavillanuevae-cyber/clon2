@@ -214,11 +214,13 @@ $('a', banking).addEventListener('click', (e) => {
   e.preventDefault();
   $('a', banking).setAttribute('aria-expanded', String(banking.classList.toggle('open')));
 });
-$$('.internet-branch .individual-btn, .internet-branch .corporate-btn, .header-bottom .individual-btn').forEach((link) => {
-  link.href = '/internet-banking';
-  link.target = '_self';
-  link.removeAttribute('data-type');
-});
+$$('.internet-branch .individual-btn, .internet-branch .corporate-btn, .header-bottom .individual-btn').forEach(
+  (link) => {
+    link.href = '/internet-banking';
+    link.target = '_self';
+    link.removeAttribute('data-type');
+  }
+);
 $('.search-btn').addEventListener('click', (e) => {
   e.preventDefault();
   $('.search-box-wrapper').classList.add('open');
@@ -300,7 +302,7 @@ const rates = [
 $('#ZiraatVerileri').innerHTML =
   `<ul class="rates-list">${rates.map(([name, buy, sell]) => `<li class="rate-item"><h3>${name}</h3><div class="rate-columns"><div><small>BANK BUY</small><strong>${buy}</strong></div><div><small>BANK SELL</small><strong>${sell}</strong></div></div></li>`).join('')}</ul><p class="rates-note">Reference snapshot · 03 Sep 2026<br>Local site — rates are not live.</p>`;
 $('#PiyasaVerileri').innerHTML =
-  '<div class="market-empty"><p>Market information</p><p>Live market data is available on the official Ziraat Bank website.</p><a href="">View current market data ↗</a></div>';
+  '<div class="market-empty"><p>Market information</p><p>Live market data is available on the official Ｚiraat Baank website.</p><a href="">View current market data ↗</a></div>';
 function setupTabs(titleSelector, panelsSelector) {
   const links = $$(`${titleSelector} a`);
   const panels = $$(panelsSelector);
@@ -447,10 +449,8 @@ function locate() {
       'This local site does not connect to the bank’s branch database. Open the official locator to search current locations and opening hours.'
     )
   );
-  content.append(
-    officialLink('Open official Branches & ATMs locator ↗')
-  );
-  showDialog('Closest Ziraat', content);
+  content.append(officialLink('Open official Branches & ATMs locator ↗'));
+  showDialog('Closest Ｚiraat', content);
 }
 $$('.map-search-btn,.map-search .icon-search').forEach((a) =>
   a.addEventListener('click', (e) => {

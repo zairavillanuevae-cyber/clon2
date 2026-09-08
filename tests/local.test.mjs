@@ -54,7 +54,7 @@ test('local HTTP server serves the homepage, assets and health, and rejects non-
     ['/en/retail', 'Retail'],
     ['/en/commercial', 'Commercial'],
     ['/en/corporate', 'Corporate'],
-    ['/tr', 'Ziraat Bankası']
+    ['/tr', 'Ｚiraat Bankası']
   ]);
   for (const [route, heading] of pages) {
     const response = await fetch(base + route);
@@ -113,8 +113,8 @@ test('local HTTP server serves the homepage, assets and health, and rejects non-
   assert.doesNotMatch(sitemap, /<a\b[^>]*\btarget=["']_blank["']/i);
   const heroPages = [
     ['/en/retail/services/western-union', 'Western Union'],
-    ['/en/digital-banking/mobile-banking/ziraat-mobil', 'Ziraat Mobil'],
-    ['/en/digital-banking/mobile-banking/ziraat-mobile-corporate', 'Ziraat Mobile Corporate']
+    ['/en/digital-banking/mobile-banking/ziraat-mobil', 'Ｚiraat Mobil'],
+    ['/en/digital-banking/mobile-banking/ziraat-mobile-corporate', 'Ｚiraat Mobile Corporate']
   ];
   for (const [route, heading] of heroPages) {
     const response = await fetch(base + route);

@@ -9,20 +9,15 @@ body = body.replace(/\s+on\w+="[^"]*"/g, '');
 body = body.replace(/<input\b[^>]*type="hidden"[^>]*>/gi, '');
 body = body.replace(/href="(\/en[^"#]*|\/tr[^"#]*)"/g, (_, url) => `href="${url}"`);
 body = body.replace(/href="javascript:;"/g, 'href="#"');
-body = body.replace(
-  /class="langUrl" href="#"/g,
-  'class="langUrl" href="/tr"'
-);
-body = body.replace(
-  /href="#" class="langUrl"/g,
-  'href="/tr" class="langUrl"'
-);
+body = body.replace(/class="langUrl" href="#"/g, 'class="langUrl" href="/tr"');
+body = body.replace(/href="#" class="langUrl"/g, 'href="/tr" class="langUrl"');
 body = body.replace(
   /<div class="item box-height owl-lazy default"/,
   '<div class="item box-height owl-lazy default active"'
 );
 body = body.replace(/data-src="(\/en\/Banners\/[^"]+)"/g, 'data-src="$1" style="background-image:url(\'$1\')"');
 body = body.replace(/(<img[^>]+)src="\/SiteAssets\/images\/transparent.png" data-src="([^"]+)"/g, '$1src="$2"');
+body = body.replace(/alt="Ｚiraat Bankası Logosu"/g, 'alt="Educational demo emblem"');
 body = body.replace(/(id="home-icon-[^"]+">)/g, '$1<span class="animation" aria-hidden="true"><span></span></span>');
 body += '</div></div>';
 const cookie = (source.match(/<div class="cookie-box[\s\S]*?<\/div>/)?.[0] || '').replace(
@@ -36,8 +31,7 @@ function neutralizeExternalLinks(markup) {
     let localHref = '';
     try {
       const parsed = new URL(href[2]);
-      if (/^\/(?:en|tr)(?:\/|$)/i.test(parsed.pathname))
-        localHref = parsed.pathname + parsed.search + parsed.hash;
+      if (/^\/(?:en|tr)(?:\/|$)/i.test(parsed.pathname)) localHref = parsed.pathname + parsed.search + parsed.hash;
       else if (/^\/Transactions\//i.test(parsed.pathname)) localHref = '/internet-banking';
     } catch {}
     return tag
@@ -48,7 +42,7 @@ function neutralizeExternalLinks(markup) {
 }
 const html = neutralizeExternalLinks(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ziraat Bank — Local Site</title><meta name="description" content="Local visual reproduction of the public Ziraat Bank English homepage.">
+<title>Ｚiraat Baank — Local Site</title><meta name="description" content="Local visual reproduction of the public Ｚiraat Baank English homepage.">
 <meta name="robots" content="noindex,nofollow"><link rel="icon" href="/SiteAssets/images/favicon.ico">
 <link rel="stylesheet" href="/SiteAssets/css/min/magiclick.min.css"><link rel="stylesheet" href="/clone.css">
 <script type="module" src="/app.js"></script></head><body class="home-page global en">

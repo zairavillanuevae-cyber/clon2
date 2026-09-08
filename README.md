@@ -1,6 +1,6 @@
-# Local Ziraat Bank Site
+# Local Ｚiraat Baank Site
 
-A local English-language reproduction of the public Ziraat Bank homepage, captured on September 3, 2026. It includes the original public HTML, images, fonts, and downloaded styles, plus a clearly labeled simulated banking environment.
+A local English-language reproduction of the public Ｚiraat Baank homepage, captured on September 3, 2026. It includes the original public HTML, images, fonts, and downloaded styles, plus a clearly labeled simulated banking environment.
 
 ## Run locally
 

@@ -90,10 +90,9 @@ svg {
 }
 .brand-mark-shell img {
   display: block;
-  width: 19px;
-  height: 29px;
+  width: 27px;
+  height: 27px;
   object-fit: contain;
-  transform: scale(1.45);
 }
 .sidebar-top .secure-badge {
   display: none;
@@ -1298,10 +1297,9 @@ svg {
 }
 .card-brand img {
   display: block;
-  width: 14px;
-  height: 22px;
+  width: 19px;
+  height: 19px;
   object-fit: contain;
-  transform: scale(1.35);
 }
 .card-brand b {
   font-size: 13px;
@@ -1813,8 +1811,8 @@ svg {
     border-radius: 10px;
   }
   .mobile-bank-head .brand-mark-shell img {
-    width: 17px;
-    height: 26px;
+    width: 23px;
+    height: 23px;
   }
   .mobile-head-actions {
     gap: 10px;

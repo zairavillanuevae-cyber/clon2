@@ -119,7 +119,7 @@ function productRows(customer) {
   const status = customer.cardStatus === 'frozen' ? 'Frozen' : 'Active';
   return `<div class="product-list">
     <button class="product-row" type="button" data-go="activity">
-      <span class="product-symbol account-symbol"><img src="/internet-banking/ziraat-mark.png" alt="" /></span>
+      <span class="product-symbol account-symbol"><img src="/internet-banking/nova-edu-mark.png" alt="" /></span>
       <span class="product-copy"><strong>${escape(customer.currency)} ACCOUNT</strong><small>${escape(maskAccount(customer.accountNumber))}</small></span>
       <span class="product-value"><strong id="balance-value" data-value="${escape(money(customer.balance))}">••••••</strong><small>Available balance</small></span>
       <span class="row-arrow">${icons.arrow}</span>
@@ -136,7 +136,7 @@ function cardVisual(customer, compact = false) {
   const numberAttributes = compact ? '' : `id="card-number" data-value="${escape(customer.cardNumber)}"`;
   const cvvAttributes = compact ? '' : `id="card-cvv" data-value="${escape(customer.cardCvv)}"`;
   return `<div class="debit-card ${compact ? 'compact-card' : ''} ${customer.cardStatus === 'frozen' ? 'is-frozen' : ''}">
-    <div class="debit-card-top"><span class="card-brand"><img src="/internet-banking/ziraat-mark.png" alt="" /><b>Ziraat Bank</b></span><strong>VISA</strong></div>
+    <div class="debit-card-top"><span class="card-brand"><img src="/internet-banking/nova-edu-mark.png" alt="" /></span><strong>VISA</strong></div>
     ${compact ? '' : '<button id="reveal-card" type="button">Show details</button>'}
     <div class="card-number" ${numberAttributes}>${escape(maskCard(customer.cardNumber))}</div>
     <div class="card-secrets"><span><small>VALID THRU</small><strong>${escape(customer.cardExpiry)}</strong></span><span><small>CVV</small><strong ${cvvAttributes}>•••</strong></span></div>

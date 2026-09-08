@@ -90,11 +90,11 @@
       </section>
     </main>
     <dialog id="customer-dialog">
-      <form id="customer-form">
+      <form id="customer-form" autocomplete="off">
         <header>
           <div>
-            <p>NEW CUSTOMER</p>
-            <h2>Create banking access</h2>
+            <p>DEMO · NEW CUSTOMER</p>
+            <h2>Create demo banking access</h2>
           </div>
           <button id="close-customer-dialog" type="button" aria-label="Close">×</button>
         </header>
@@ -135,34 +135,18 @@
           >
           <div class="wide banking-fields-title">
             <div>
-              <strong>Account and card details</strong><small>Enter them manually or generate a complete set.</small>
+              <strong>Demo account details</strong
+              ><small>The demo card number, validity and security code are generated automatically.</small>
             </div>
-            <button id="generate-banking-details" type="button">Generate details</button>
+            <button id="generate-banking-details" type="button">Generate demo account</button>
           </div>
           <label class="wide"
-            >Account number / IBAN<input name="accountNumber" maxlength="40" autocomplete="off" required /></label
-          ><label class="wide"
-            >Card number<input
-              name="cardNumber"
-              inputmode="numeric"
-              maxlength="19"
-              placeholder="0000 0000 0000 0000"
-              autocomplete="off"
-              required /></label
-          ><label
-            >Expiry<input
-              name="cardExpiry"
-              inputmode="numeric"
-              maxlength="5"
-              placeholder="MM/YY"
-              autocomplete="off"
-              required /></label
-          ><label
-            >CVV<input name="cardCvv" inputmode="numeric" maxlength="4" placeholder="000" autocomplete="off" required
+            >Demo account number / IBAN<input name="accountNumber" maxlength="40" autocomplete="off" required
           /></label>
         </div>
         <p class="dialog-note">
-          The password is securely hashed and cannot be viewed again after the account is created.
+          Demo operator environment. The password is securely hashed and cannot be viewed again after the account is
+          created.
         </p>
         <p id="customer-form-error" class="form-error" role="alert"></p>
         <footer>

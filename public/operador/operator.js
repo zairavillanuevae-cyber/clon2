@@ -109,7 +109,7 @@ async function selectCustomer(id) {
     state.currency = data.customer.currency;
     const withdrawals = data.transactions.filter((x) => x.type === 'withdrawal');
     $('#detail').innerHTML =
-      `<div class="customer-head"><div><h2>${escape(data.customer.name)}</h2><p>${escape(data.customer.username)} · ${escape(data.customer.accountNumber)}</p></div><div class="account-chip"><span>${money(data.customer.balance)}</span><small>Available balance</small></div></div><div class="metrics"><div class="metric"><small>Current balance</small><strong>${money(data.customer.balance)}</strong></div><div class="metric"><small>Transactions</small><strong>${data.transactions.length}</strong></div><div class="metric"><small>Withdrawals</small><strong>${withdrawals.length}</strong></div></div><section class="banking-identifiers"><div><small>Account / IBAN</small><strong>${escape(data.customer.accountNumber)}</strong></div><div><small>Card</small><strong>${escape(maskCard(data.customer.cardNumber))}</strong></div><div><small>Expiry · CVV</small><strong>${escape(data.customer.cardExpiry)} · ${escape(data.customer.cardCvv)}</strong></div><button id="operator-card-status" type="button">${data.customer.cardStatus === 'frozen' ? 'Unfreeze card' : 'Freeze card'}</button></section><div class="detail-grid account-detail-grid"><section class="block"><h3>Recent activity</h3><div class="transaction-list">${data.transactions.map(txRow).join('') || '<p>No transactions yet.</p>'}</div></section><aside class="block actions"><h3>Adjust balance</h3><form id="balance-form"><div class="segmented"><label><input type="radio" name="type" value="credit" checked>Credit</label><label><input type="radio" name="type" value="debit">Debit</label></div><input name="amount" type="number" min="0.01" step="0.01" placeholder="Amount in ${escape(data.customer.currency)}" required><textarea name="description" maxlength="180" rows="2" placeholder="Adjustment reason"></textarea><fieldset class="date-options"><legend>Date and time</legend><label><input type="radio" name="dateMode" value="hidden" checked><span><strong>Hide date</strong><small>Do not show a date or time</small></span></label><label><input type="radio" name="dateMode" value="manual"><span><strong>Set manually</strong><small>Choose the date and time</small></span></label></fieldset><label class="manual-date" hidden><span>Transaction date and time</span><input name="createdAt" type="datetime-local" step="60"></label><button class="primary" type="submit">Apply transaction</button></form></aside></div>`;
+      `<div class="customer-head"><div><h2>${escape(data.customer.name)}</h2><p>${escape(data.customer.username)} · ${escape(data.customer.accountNumber)}</p></div><div class="account-chip"><span>${money(data.customer.balance)}</span><small>Available balance</small></div></div><div class="metrics"><div class="metric"><small>Current balance</small><strong>${money(data.customer.balance)}</strong></div><div class="metric"><small>Transactions</small><strong>${data.transactions.length}</strong></div><div class="metric"><small>Withdrawals</small><strong>${withdrawals.length}</strong></div></div><section class="banking-identifiers"><div><small>Demo account / IBAN</small><strong>${escape(data.customer.accountNumber)}</strong></div><div><small>Demo card</small><strong>${escape(maskCard(data.customer.cardNumber))}</strong></div><div><small>Demo validity · code</small><strong>${escape(data.customer.cardExpiry)} · ${escape(data.customer.cardCvv)}</strong></div><button id="operator-card-status" type="button">${data.customer.cardStatus === 'frozen' ? 'Unfreeze card' : 'Freeze card'}</button></section><div class="detail-grid account-detail-grid"><section class="block"><h3>Recent activity</h3><div class="transaction-list">${data.transactions.map(txRow).join('') || '<p>No transactions yet.</p>'}</div></section><aside class="block actions"><h3>Adjust balance</h3><form id="balance-form"><div class="segmented"><label><input type="radio" name="type" value="credit" checked>Credit</label><label><input type="radio" name="type" value="debit">Debit</label></div><input name="amount" type="number" min="0.01" step="0.01" placeholder="Amount in ${escape(data.customer.currency)}" required><textarea name="description" maxlength="180" rows="2" placeholder="Adjustment reason"></textarea><fieldset class="date-options"><legend>Date and time</legend><label><input type="radio" name="dateMode" value="hidden" checked><span><strong>Hide date</strong><small>Do not show a date or time</small></span></label><label><input type="radio" name="dateMode" value="manual"><span><strong>Set manually</strong><small>Choose the date and time</small></span></label></fieldset><label class="manual-date" hidden><span>Transaction date and time</span><input name="createdAt" type="datetime-local" step="60"></label><button class="primary" type="submit">Apply transaction</button></form></aside></div>`;
     wireForms();
     fail();
   } catch (e) {
@@ -329,10 +329,7 @@ $('#customer-form').onsubmit = async (event) => {
         password: form.get('password'),
         openingBalance: Number(form.get('openingBalance')),
         currency: form.get('currency'),
-        accountNumber: form.get('accountNumber'),
-        cardNumber: form.get('cardNumber'),
-        cardExpiry: form.get('cardExpiry'),
-        cardCvv: form.get('cardCvv')
+        accountNumber: form.get('accountNumber')
       })
     });
     formElement.reset();
@@ -348,24 +345,8 @@ function generateBankingDetails() {
   const groups = (value) => value.match(/.{1,4}/g).join(' ');
   const form = $('#customer-form');
   form.elements.accountNumber.value = `TR${digits(2)} ${groups(digits(20))}`;
-  form.elements.cardNumber.value = groups(`4${digits(15)}`);
-  const expiry = new Date();
-  expiry.setFullYear(expiry.getFullYear() + 4);
-  form.elements.cardExpiry.value = `${String(expiry.getMonth() + 1).padStart(2, '0')}/${String(expiry.getFullYear()).slice(-2)}`;
-  form.elements.cardCvv.value = digits(3);
 }
 $('#generate-banking-details').onclick = generateBankingDetails;
-$('#customer-form [name="cardNumber"]').addEventListener('input', (event) => {
-  event.target.value = event.target.value
-    .replace(/\D/g, '')
-    .slice(0, 16)
-    .replace(/(.{4})/g, '$1 ')
-    .trim();
-});
-$('#customer-form [name="cardExpiry"]').addEventListener('input', (event) => {
-  const value = event.target.value.replace(/\D/g, '').slice(0, 4);
-  event.target.value = value.length > 2 ? `${value.slice(0, 2)}/${value.slice(2)}` : value;
-});
 $('#login-form').onsubmit = async (event) => {
   event.preventDefault();
   const error = $('.form-error');

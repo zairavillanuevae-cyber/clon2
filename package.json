@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Local reproduction of the public Ziraat Bank English homepage",
+  "description": "Local reproduction of the public Ｚiraat Baank English homepage",
   "engines": {
     "node": ">=22.8"
   },

@@ -89,7 +89,7 @@ const heroSpecs = [
   ],
   [
     'hero-ziraat-mobile',
-    'Ziraat Mobil',
+    'Ｚiraat Mobil',
     '/en/digital-banking/mobile-banking/ziraat-mobil',
     '/en/digital-banking/mobile-banking/ziraat-mobil',
     'Digital Banking',
@@ -97,7 +97,7 @@ const heroSpecs = [
   ],
   [
     'hero-ziraat-mobile-corporate',
-    'Ziraat Mobile Corporate',
+    'Ｚiraat Mobile Corporate',
     '/en/digital-banking/mobile-banking/ziraat-mobile-corporate',
     '/en/digital-banking/mobile-banking/ziraat-mobile-corporate',
     'Digital Banking',
@@ -125,8 +125,7 @@ function neutralizeExternalLinks(markup) {
     let localHref = '';
     try {
       const parsed = new URL(href[2]);
-      if (/^\/(?:en|tr)(?:\/|$)/i.test(parsed.pathname))
-        localHref = parsed.pathname + parsed.search + parsed.hash;
+      if (/^\/(?:en|tr)(?:\/|$)/i.test(parsed.pathname)) localHref = parsed.pathname + parsed.search + parsed.hash;
       else if (/^\/Transactions\//i.test(parsed.pathname)) localHref = '/internet-banking';
     } catch {}
     return tag
@@ -250,10 +249,7 @@ function content(raw, title, sourceRoute) {
         : `<article class="clone-card">${x.Img ? `<img src="${esc(x.Img)}" alt="">` : ''}<div class="clone-card-body"><h2><a href="${esc(localTarget(x.Url))}">${esc(x.Title || title)}</a></h2>${
             x.Childs?.length
               ? `<ul>${x.Childs.slice(0, 8)
-                  .map(
-                    (y) =>
-                      `<li><a href="${esc(localTarget(y.Url))}">${esc(y.Title)}</a></li>`
-                  )
+                  .map((y) => `<li><a href="${esc(localTarget(y.Url))}">${esc(y.Title)}</a></li>`)
                   .join('')}</ul>`
               : ''
           }</div></article>`
@@ -304,7 +300,7 @@ const trDir = new URL('public/tr/', root);
 await mkdir(trDir, { recursive: true });
 await writeFile(
   new URL('index.html', trDir),
-  `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ziraat Bankası — Yerel Site</title><meta name="robots" content="noindex,nofollow"><link rel="stylesheet" href="/SiteAssets/css/min/magiclick.min.css"><link rel="stylesheet" href="/clone.css"><link rel="stylesheet" href="/subpages.css"></head><body class="global"><header class="tr-local-bar"><a href="/en">ENGLISH</a><img src="/SiteAssets/images/logo.png" alt="Ziraat Bankası"><a href="/internet-banking">İnternet Şubesi ↗</a></header><main><h1 class="sr-only">T.C. Ziraat Bankası A.Ş.</h1><div class="tr-grid">${trCards}</div><section class="tr-local-content"><h2>Ziraat Bankası</h2><p>Türkçe ana sayfanın yerel görsel kopyası. İşlem gerektiren bağlantılar resmi web sitesinde açılır.</p></section></main><p class="site-note">Yerel site · Bankacılık işlemi yapılmaz.</p></body></html>`
+  `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ｚiraat Bankası — Yerel Site</title><meta name="robots" content="noindex,nofollow"><link rel="stylesheet" href="/SiteAssets/css/min/magiclick.min.css"><link rel="stylesheet" href="/clone.css"><link rel="stylesheet" href="/subpages.css"></head><body class="global"><header class="tr-local-bar"><a href="/en">ENGLISH</a><img src="/SiteAssets/images/logo.png" alt="Educational demo emblem"><a href="/internet-banking">İnternet Şubesi ↗</a></header><main><h1 class="sr-only">T.C. Ｚiraat Bankası A.Ş.</h1><div class="tr-grid">${trCards}</div><section class="tr-local-content"><h2>Ｚiraat Bankası</h2><p>Türkçe ana sayfanın yerel görsel kopyası. İşlem gerektiren bağlantılar resmi web sitesinde açılır.</p></section></main><p class="site-note">Yerel site · Bankacılık işlemi yapılmaz.</p></body></html>`
 );
 console.log(
   `Built ${8 + menuSpecs.length + footerSpecs.length + heroSpecs.length} additional public routes from saved HTML.`
