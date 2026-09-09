@@ -2,7 +2,7 @@ FROM node:22-alpine
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
-COPY server.mjs chat-store.mjs bank-store.mjs ./
+COPY server.mjs chat-store.mjs bank-store.mjs r2-storage.mjs ./
 COPY public ./public
 ENV NODE_ENV=production
 ENV PORT=3000
