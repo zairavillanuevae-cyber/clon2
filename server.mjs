@@ -104,6 +104,9 @@ export function createServer(options = {}) {
   const store = options.store || createMemoryChatStore();
   const bankStore = options.bankStore || createMemoryBankStore();
   const operatorKey = options.operatorKey ?? process.env.OPERATOR_KEY ?? '';
+  const transferReversalDelayMs = Number.isFinite(options.transferReversalDelayMs)
+    ? Math.max(0, options.transferReversalDelayMs)
+    : 120_000;
   const sessionSecret =
     options.sessionSecret || process.env.BANK_SESSION_SECRET || operatorKey || crypto.randomBytes(32).toString('hex');
   return http.createServer(async (req, res) => {
@@ -287,24 +290,49 @@ export function createServer(options = {}) {
         if (!customerId) return sendJson(res, 401, { error: 'Invalid session.' });
         const customer = await bankStore.getCustomer(customerId);
         if (!customer) return sendJson(res, 401, { error: 'Invalid session.' });
-        if (pathname === '/api/banking/me' && req.method === 'GET')
+        if (pathname === '/api/banking/me' && req.method === 'GET') {
+          await bankStore.processDueReversals(customerId);
           return sendJson(res, 200, {
-            customer,
+            customer: await bankStore.getCustomer(customerId),
             transactions: await bankStore.getTransactions(customerId, 20),
             messages: await bankStore.getMessages(customerId)
           });
+        }
+        if (pathname === '/api/banking/notifications' && req.method === 'GET') {
+          await bankStore.processDueReversals(customerId);
+          return sendJson(res, 200, {
+            customer: await bankStore.getCustomer(customerId),
+            notifications: await bankStore.getNotifications(customerId)
+          });
+        }
+        const notificationMatch = pathname.match(/^\/api\/banking\/notifications\/(\d+)$/);
+        if (notificationMatch && req.method === 'PATCH') {
+          const dismissed = await bankStore.dismissNotification(customerId, Number(notificationMatch[1]));
+          if (!dismissed) return sendJson(res, 404, { error: 'Notification not found.' });
+          return sendJson(res, 200, { ok: true });
+        }
         if (pathname === '/api/banking/transactions' && req.method === 'POST') {
           const body = await readJson(req);
           if (!['deposit', 'withdrawal', 'payment'].includes(body.type))
             return sendJson(res, 400, { error: 'Invalid transaction.' });
-          const blockedLabel = {
-            deposit: 'Deposits',
-            withdrawal: 'Transfers',
-            payment: 'Bill payments'
-          }[body.type];
-          return sendJson(res, 403, {
-            error: `${blockedLabel} are disabled. Contact support for assistance.`
+          if (body.type !== 'withdrawal') {
+            const blockedLabel = body.type === 'deposit' ? 'Deposits' : 'Bill payments';
+            return sendJson(res, 403, {
+              error: `${blockedLabel} are disabled. Contact support for assistance.`
+            });
+          }
+          const result = await bankStore.transact({
+            customerId,
+            type: 'withdrawal',
+            amount: body.amount,
+            description: cleanText(body.description, 180) || 'Bank transfer',
+            actor: 'customer',
+            reversalDueAt: new Date(Date.now() + transferReversalDelayMs).toISOString()
           });
+          if (result.error === 'insufficient_funds')
+            return sendJson(res, 409, { error: 'Insufficient funds for this transfer.' });
+          if (result.error) return sendJson(res, 400, { error: 'Enter a valid amount.' });
+          return sendJson(res, 201, result);
         }
         if (pathname === '/api/banking/card-status' && req.method === 'PATCH') {
           const body = await readJson(req);

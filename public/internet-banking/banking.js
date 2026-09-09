@@ -1,8 +1,14 @@
+import { createTransferReceiptPdf } from './receipt-pdf.js';
+
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 const state = { data: null, view: 'home', balanceVisible: false, cardVisible: false };
 let activeCurrency = 'USD';
 let activeBlockedOperation = 'deposit';
+let latestReceipt = null;
+let toastTimer = null;
+let refundPolling = false;
+let activeRefundNotificationId = null;
 
 const blockedOperations = {
   deposit: {
@@ -96,6 +102,8 @@ function transactionLabel(type) {
     ? 'Payment'
     : type === 'withdrawal'
       ? 'Transfer'
+      : type === 'reversal'
+        ? 'Returned transfer'
       : type === 'opening'
         ? 'Opening balance'
         : 'Credit';
@@ -144,6 +152,20 @@ function cardVisual(customer, compact = false) {
 }
 function operationForm(type) {
   const payment = type === 'payment';
+  if (!payment)
+    return `<form class="operation-form" data-transaction-form="withdrawal">
+      <div class="form-intro-row"><div><span class="form-index">SEND</span><h2>Make a transfer</h2></div><small>Available ${money(state.data.customer.balance)}</small></div>
+      <label>Recipient name<input name="recipientName" maxlength="80" placeholder="Full name" required /></label>
+      <label>Recipient account<input name="recipientAccount" maxlength="40" placeholder="IBAN or account number" autocomplete="off" spellcheck="false" required /></label>
+      <label>Amount<input name="amount" type="number" min="0.01" step="0.01" placeholder="0.00 ${escape(activeCurrency)}" required /></label>
+      <label>Reference<textarea name="description" maxlength="180" rows="3" placeholder="Add a note (optional)"></textarea></label>
+      <div class="transfer-progress" data-transfer-progress role="status" aria-live="polite" hidden>
+        <span class="transfer-spinner" aria-hidden="true"></span>
+        <div><strong>Transfer pending</strong><small data-transfer-countdown>Processing securely · 5 seconds remaining</small></div>
+      </div>
+      <button class="primary operation-submit" type="submit"><b data-submit-label>Send transfer</b><span data-submit-state>Continue</span></button>
+      <p class="form-assurance">Your balance updates immediately after a successful transfer.</p>
+    </form>`;
   return `<section class="operation-form blocked-operation-card" aria-labelledby="${type}-blocked-title">
     <div class="form-intro-row"><div><span class="form-index">${payment ? 'PAY' : 'SEND'}</span><h2>${payment ? 'Pay a bill' : 'Make a transfer'}</h2></div><small>Available ${money(state.data.customer.balance)}</small></div>
     <div class="blocked-operation-main">
@@ -177,10 +199,10 @@ function renderDashboard(data) {
         <section class="quick-section" aria-labelledby="quick-title">
           <div class="section-title-row"><h2 id="quick-title">What would you like to do?</h2><small>Quick access</small></div>
           <div class="quick-actions">
-            <button class="locked-action" type="button" data-go="transfer"><span>${icons.send}<i class="lock-badge">${icons.lock}</i></span><strong>Send to<br />a contact<small>Blocked</small></strong></button>
+            <button type="button" data-go="transfer"><span>${icons.send}</span><strong>Send to<br />a contact<small>Available</small></strong></button>
             <button class="locked-action" type="button" data-go="payments"><span>${icons.qr}<i class="lock-badge">${icons.lock}</i></span><strong>Pay with<br />QR<small>Blocked</small></strong></button>
             <button class="locked-action" type="button" data-go="payments"><span>${icons.drop}<i class="lock-badge">${icons.lock}</i></span><strong>Pay<br />bills<small>Blocked</small></strong></button>
-            <button class="locked-action" type="button" data-go="transfer"><span>${icons.transfer}<i class="lock-badge">${icons.lock}</i></span><strong>Transfer<br />money<small>Blocked</small></strong></button>
+            <button type="button" data-go="transfer"><span>${icons.transfer}</span><strong>Transfer<br />money<small>Available</small></strong></button>
             <button class="locked-action" type="button" data-deposit><span>${icons.deposit}<i class="lock-badge">${icons.lock}</i></span><strong>Deposit<br /><small>Blocked</small></strong></button>
           </div>
         </section>
@@ -210,8 +232,8 @@ function renderDashboard(data) {
     </section>
 
     <section class="bank-view operation-view" data-page="transfer" hidden>
-      <div class="editorial-head"><p>Move your money</p><h2>Transfer service is currently unavailable.</h2><span>Transaction details cannot be entered while transfers are blocked.</span></div>
-      <div class="operation-layout">${operationForm('withdrawal')}<aside class="context-panel"><span>TRANSFER STATUS</span><strong>Currently blocked</strong><div><small>Available balance</small><b>${money(customer.balance)}</b></div><p>Transfers require support activation before money can leave your account.</p><button type="button" data-contact-blocked-operation="withdrawal">Contact support</button></aside></div>
+      <div class="editorial-head"><p>Move your money</p><h2>Transfer securely and simply.</h2><span>Enter the recipient, amount, and an optional reference to send money from your account.</span></div>
+      <div class="operation-layout">${operationForm('withdrawal')}<aside class="context-panel"><span>FROM ACCOUNT</span><strong>${escape(customer.accountNumber)}</strong><div><small>Available balance</small><b>${money(customer.balance)}</b></div><p>Transfers are debited from your primary ${escape(customer.currency)} account.</p></aside></div>
     </section>
 
     <section class="bank-view operation-view" data-page="payments" hidden>
@@ -311,6 +333,156 @@ function contactBlockedOperation(type) {
   field.focus();
 }
 
+async function submitTransaction(event) {
+  event.preventDefault();
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
+  const recipientName = String(form.get('recipientName') || '').trim();
+  const recipientAccount = String(form.get('recipientAccount') || '').trim();
+  const reference = String(form.get('description') || '').trim();
+  setTransferProcessing(formElement, true, 5);
+  try {
+    await transferDelay(formElement, 5);
+    const result = await api('/api/banking/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: formElement.dataset.transactionForm,
+        amount: Number(form.get('amount')),
+        description: `${recipientName} · ${recipientAccount}${reference ? ` · ${reference}` : ''}`
+      })
+    });
+    latestReceipt = {
+      id: result.transaction.id,
+      amount: result.transaction.amount,
+      createdAt: result.transaction.createdAt,
+      recipientName,
+      recipientAccount,
+      reference,
+      accountNumber: result.customer.accountNumber,
+      balance: result.customer.balance,
+      currency: result.customer.currency
+    };
+    formElement.reset();
+    await load();
+    setView('transfer');
+    showToast('Transfer sent successfully.', 'success');
+    showReceipt(latestReceipt);
+    const reversalWait = new Date(result.transaction.reversalDueAt).getTime() - Date.now();
+    if (Number.isFinite(reversalWait)) setTimeout(pollRefundNotifications, Math.max(0, reversalWait + 250));
+  } catch (error) {
+    setTransferProcessing(formElement, false);
+    fail(error.message);
+  }
+}
+
+function setTransferProcessing(formElement, processing, seconds = 5) {
+  formElement.classList.toggle('is-processing', processing);
+  formElement.setAttribute('aria-busy', String(processing));
+  formElement.querySelectorAll('input, textarea, button').forEach((control) => {
+    control.disabled = processing;
+  });
+  const progress = formElement.querySelector('[data-transfer-progress]');
+  progress.hidden = !processing;
+  formElement.querySelector('[data-submit-label]').textContent = processing ? 'Processing transfer' : 'Send transfer';
+  formElement.querySelector('[data-submit-state]').textContent = processing ? `${seconds}s` : 'Continue';
+  if (processing)
+    formElement.querySelector('[data-transfer-countdown]').textContent = `Processing securely · ${seconds} seconds remaining`;
+}
+
+function transferDelay(formElement, seconds) {
+  return new Promise((resolve) => {
+    let remaining = seconds;
+    const timer = setInterval(() => {
+      remaining -= 1;
+      const countdown = formElement.querySelector('[data-transfer-countdown]');
+      const buttonState = formElement.querySelector('[data-submit-state]');
+      if (countdown)
+        countdown.textContent =
+          remaining > 0 ? `Processing securely · ${remaining} seconds remaining` : 'Finalizing transfer...';
+      if (buttonState) buttonState.textContent = remaining > 0 ? `${remaining}s` : 'Pending';
+      if (remaining <= 0) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, 1000);
+  });
+}
+
+function showToast(message, type = 'error') {
+  const toast = $('#app-error');
+  clearTimeout(toastTimer);
+  toast.classList.toggle('success', type === 'success');
+  toast.textContent = message;
+  toastTimer = setTimeout(() => {
+    toast.textContent = '';
+    toast.classList.remove('success');
+  }, 5000);
+}
+
+function showReceipt(receipt) {
+  $('#receipt-amount').textContent = money(receipt.amount);
+  $('#receipt-recipient').textContent = receipt.recipientName;
+  $('#receipt-recipient-account').textContent = receipt.recipientAccount;
+  $('#receipt-reference').textContent = receipt.reference || 'No reference provided';
+  $('#receipt-date').textContent = date(receipt.createdAt);
+  $('#receipt-number').textContent = `TX-${String(receipt.id).padStart(6, '0')}`;
+  $('#receipt-balance').textContent = money(receipt.balance);
+  const dialog = $('#receipt-dialog');
+  if (!dialog.open) dialog.showModal();
+}
+
+function downloadReceipt() {
+  if (!latestReceipt) return;
+  const pdf = createTransferReceiptPdf(latestReceipt);
+  const url = URL.createObjectURL(new Blob([pdf], { type: 'application/pdf' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `transfer-receipt-${latestReceipt.id}.pdf`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function pollRefundNotifications() {
+  if (refundPolling || $('#app').hidden) return;
+  refundPolling = true;
+  try {
+    const data = await api('/api/banking/notifications');
+    const notification = data.notifications[0];
+    if (!notification || activeRefundNotificationId === notification.id) return;
+    await load();
+    activeRefundNotificationId = notification.id;
+    $('#refund-amount').textContent = money(notification.amount);
+    $('#refund-transfer-number').textContent = `TX-${String(notification.relatedTransactionId).padStart(6, '0')}`;
+    $('#refund-balance').textContent = money(data.customer.balance);
+    $('#refund-date').textContent = date(notification.createdAt);
+    const dialog = $('#refund-dialog');
+    if (!dialog.open) dialog.showModal();
+  } catch (error) {
+    if (!$('#app').hidden) fail(error.message);
+  } finally {
+    refundPolling = false;
+  }
+}
+
+async function dismissRefundNotification() {
+  if (!activeRefundNotificationId) return;
+  const button = $('#accept-refund');
+  button.disabled = true;
+  try {
+    await api(`/api/banking/notifications/${activeRefundNotificationId}`, { method: 'PATCH' });
+    activeRefundNotificationId = null;
+    $('#refund-dialog').close();
+    showToast('Return notification acknowledged.', 'success');
+  } catch (error) {
+    fail(error.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function wireDashboard() {
   $$('[data-go]').forEach((button) => (button.onclick = () => setView(button.dataset.go)));
   $$('[data-deposit]').forEach((button) => (button.onclick = () => openBlockedDialog('deposit')));
@@ -321,6 +493,7 @@ function wireDashboard() {
     (button) => (button.onclick = () => contactBlockedOperation(button.dataset.contactBlockedOperation))
   );
   $$('[data-open-chat]').forEach((button) => (button.onclick = () => setChat(true)));
+  $$('[data-transaction-form]').forEach((form) => (form.onsubmit = submitTransaction));
   $$('[data-payee]').forEach((button) => {
     button.onclick = () => {
       const input = $('[data-page="payments"] [name="recipient"]');
@@ -380,7 +553,12 @@ function render(data) {
     window.gsap.from('.home-layout > *', { y: 22, opacity: 0, duration: 0.6, stagger: 0.06, ease: 'power3.out' });
 }
 function fail(text = '') {
-  $('#app-error').textContent = text;
+  if (text) showToast(text);
+  else {
+    clearTimeout(toastTimer);
+    $('#app-error').textContent = '';
+    $('#app-error').classList.remove('success');
+  }
 }
 function showLogin() {
   $('#app').hidden = true;
@@ -423,6 +601,11 @@ $('#contact-blocked-operation-support').onclick = () => {
   $('#blocked-operation-dialog').close();
   contactBlockedOperation(activeBlockedOperation);
 };
+$('#close-receipt').onclick = () => $('#receipt-dialog').close();
+$('#done-receipt').onclick = () => $('#receipt-dialog').close();
+$('#download-receipt').onclick = downloadReceipt;
+$('#accept-refund').onclick = dismissRefundNotification;
+$('#refund-dialog').addEventListener('cancel', (event) => event.preventDefault());
 $('#message-form').onsubmit = async (event) => {
   event.preventDefault();
   const formElement = event.currentTarget;
@@ -445,3 +628,4 @@ document.addEventListener('keydown', (event) => {
 });
 
 load();
+setInterval(pollRefundNotifications, 5000);

@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { createServer } from '../server.mjs';
 import { depositTotal, monthlyPayment } from '../public/calculations.js';
 import { getVisitorId, visitorDisplayName } from '../public/visitor-identity.js';
+import { createTransferReceiptPdf } from '../public/internet-banking/receipt-pdf.js';
 
 test('deposit uses the selected rate, term and withholding', () => {
   assert.equal(depositTotal(10000, 30, 365, 0), 13000);
@@ -30,6 +31,67 @@ test('visitor identity is stable in browser storage and has a short display name
   assert.equal(firstId, '8d12f63e-aaaa-4bbb-8ccc-123456789abc');
   assert.equal(getVisitorId(storage, { randomUUID: () => assert.fail('must reuse the stored UUID') }), firstId);
   assert.equal(visitorDisplayName(firstId), 'Visitor 8D12F6');
+});
+test('transfer receipt generator creates a valid one-page PDF', () => {
+  const pdf = createTransferReceiptPdf({
+    id: 42,
+    amount: 140.5,
+    currency: 'USD',
+    recipientName: 'Maria Alvarez',
+    recipientAccount: 'ES91 2100 0418 4502 0005 1332',
+    reference: 'September invoice',
+    accountNumber: 'TR00 0000 0000 0000 0000 0001',
+    balance: 12700,
+    createdAt: '2026-09-09T15:30:00.000Z'
+  });
+  const contents = new TextDecoder().decode(pdf);
+  assert.equal(contents.slice(0, 8), '%PDF-1.4');
+  assert.match(contents, /TRANSFER RECEIPT/);
+  assert.match(contents, /Maria Alvarez/);
+  assert.match(contents, /ES91 2100 0418 4502 0005 1332/);
+  assert.match(contents, /%%EOF/);
+  assert.ok(pdf.length > 2000);
+});
+test('a transfer is returned after its delay and its notification can be dismissed', async (t) => {
+  const server = createServer({
+    sessionSecret: 'refund-session-secret',
+    transferReversalDelayMs: 15
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const login = await fetch(base + '/api/banking/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: 'customer.portal', password: 'Portal2026!' })
+  });
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const transfer = await fetch(base + '/api/banking/transactions', {
+    method: 'POST',
+    headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'withdrawal', amount: 40, description: 'Return test' })
+  });
+  assert.equal(transfer.status, 201);
+  assert.equal((await transfer.json()).customer.balance, 12800.5);
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  const notificationResponse = await fetch(base + '/api/banking/notifications', { headers: { cookie } });
+  assert.equal(notificationResponse.status, 200);
+  const notificationData = await notificationResponse.json();
+  assert.equal(notificationData.customer.balance, 12840.5);
+  assert.equal(notificationData.notifications.length, 1);
+  assert.equal(notificationData.notifications[0].amount, 40);
+  const notificationId = notificationData.notifications[0].id;
+  const dismissed = await fetch(`${base}/api/banking/notifications/${notificationId}`, {
+    method: 'PATCH',
+    headers: { cookie }
+  });
+  assert.equal(dismissed.status, 200);
+  const afterDismiss = await (
+    await fetch(base + '/api/banking/notifications', { headers: { cookie } })
+  ).json();
+  assert.deepEqual(afterDismiss.notifications, []);
+  const account = await (await fetch(base + '/api/banking/me', { headers: { cookie } })).json();
+  assert.equal(account.transactions[0].type, 'reversal');
 });
 test('local HTTP server serves the homepage, assets and health, and rejects non-public paths', async (t) => {
   const server = createServer();
@@ -213,7 +275,7 @@ test('visitor and authenticated operator can exchange chat messages', async (t) 
   );
 });
 
-test('customer transactions are blocked while operator adjustments and banking messages remain available', async (t) => {
+test('customer transfers are available while deposits and payments remain blocked', async (t) => {
   const server = createServer({ operatorKey: 'test-operator-secret', sessionSecret: 'test-session-secret' });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
@@ -234,7 +296,11 @@ test('customer transactions are blocked while operator adjustments and banking m
     headers: { cookie: customerCookie, 'content-type': 'application/json' },
     body: JSON.stringify({ type: 'withdrawal', amount: 140.5, description: 'Test withdrawal' })
   });
-  assert.equal(withdrawal.status, 403);
+  assert.equal(withdrawal.status, 201);
+  const withdrawalData = await withdrawal.json();
+  assert.equal(withdrawalData.customer.balance, 12700);
+  assert.equal(withdrawalData.transaction.type, 'withdrawal');
+  assert.equal(withdrawalData.transaction.actor, 'customer');
   const payment = await fetch(base + '/api/banking/transactions', {
     method: 'POST',
     headers: { cookie: customerCookie, 'content-type': 'application/json' },
@@ -246,7 +312,7 @@ test('customer transactions are blocked while operator adjustments and banking m
     headers: { cookie: customerCookie, 'content-type': 'application/json' },
     body: JSON.stringify({ type: 'withdrawal', amount: 999999 })
   });
-  assert.equal(denied.status, 403);
+  assert.equal(denied.status, 409);
   const depositDenied = await fetch(base + '/api/banking/transactions', {
     method: 'POST',
     headers: { cookie: customerCookie, 'content-type': 'application/json' },
@@ -348,7 +414,7 @@ test('customer transactions are blocked while operator adjustments and banking m
     body: JSON.stringify({ type: 'credit', amount: 300, description: 'Approved adjustment' })
   });
   assert.equal(credit.status, 201);
-  assert.equal((await credit.json()).customer.balance, 13140.5);
+  assert.equal((await credit.json()).customer.balance, 13000);
   const hiddenDateCredit = await fetch(`${base}/api/operator/customers/${id}/transactions`, {
     method: 'POST',
     headers: { cookie: operatorCookie, 'content-type': 'application/json' },

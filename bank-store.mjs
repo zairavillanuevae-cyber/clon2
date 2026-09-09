@@ -149,7 +149,16 @@ export function createMemoryBankStore({
         .slice(-limit)
         .reverse();
     },
-    async transact({ customerId, type, amount, description, actor, createdAt = nowIso(), showDate = true }) {
+    async transact({
+      customerId,
+      type,
+      amount,
+      description,
+      actor,
+      createdAt = nowIso(),
+      showDate = true,
+      reversalDueAt = null
+    }) {
       const activeCustomer = customers.get(customerId);
       if (!activeCustomer) return { error: 'not_found' };
       const cents = money(amount);
@@ -165,10 +174,73 @@ export function createMemoryBankStore({
         description,
         actor,
         createdAt,
-        showDate
+        showDate,
+        reversalDueAt,
+        reversedAt: null,
+        relatedTransactionId: null,
+        notificationDismissed: false
       };
       transactions.push(row);
       return { customer: publicCustomer(activeCustomer), transaction: row };
+    },
+    async processDueReversals(customerId, currentTime = Date.now()) {
+      const activeCustomer = customers.get(customerId);
+      if (!activeCustomer?.active) return [];
+      const reversed = [];
+      for (const transaction of transactions) {
+        if (
+          transaction.customerId !== customerId ||
+          transaction.type !== 'withdrawal' ||
+          !transaction.reversalDueAt ||
+          transaction.reversedAt ||
+          new Date(transaction.reversalDueAt).getTime() > currentTime
+        )
+          continue;
+        const createdAt = nowIso();
+        transaction.reversedAt = createdAt;
+        activeCustomer.balance_cents += money(transaction.amount);
+        const reversal = {
+          id: ++transactionId,
+          customerId,
+          type: 'reversal',
+          amount: transaction.amount,
+          description: `Returned transfer: ${transaction.description}`.slice(0, 180),
+          actor: 'system',
+          createdAt,
+          showDate: true,
+          reversalDueAt: null,
+          reversedAt: null,
+          relatedTransactionId: transaction.id,
+          notificationDismissed: false
+        };
+        transactions.push(reversal);
+        reversed.push(reversal);
+      }
+      return reversed;
+    },
+    async getNotifications(customerId) {
+      return transactions
+        .filter(
+          (transaction) =>
+            transaction.customerId === customerId &&
+            transaction.type === 'reversal' &&
+            !transaction.notificationDismissed
+        )
+        .map((transaction) => ({
+          id: transaction.id,
+          type: 'transfer_reversed',
+          amount: transaction.amount,
+          relatedTransactionId: transaction.relatedTransactionId,
+          createdAt: transaction.createdAt
+        }));
+    },
+    async dismissNotification(customerId, notificationId) {
+      const transaction = transactions.find(
+        (item) => item.id === notificationId && item.customerId === customerId && item.type === 'reversal'
+      );
+      if (!transaction) return false;
+      transaction.notificationDismissed = true;
+      return true;
     },
     async getMessages(id, after = 0) {
       return messages.filter((item) => item.customerId === id && item.id > after);
@@ -224,6 +296,12 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
     "ALTER TABLE bank_customers ADD COLUMN IF NOT EXISTS card_status VARCHAR(12) NOT NULL DEFAULT 'active'"
   );
   await pool.query('ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS show_date BOOLEAN NOT NULL DEFAULT TRUE');
+  await pool.query('ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS reversal_due_at TIMESTAMPTZ');
+  await pool.query('ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS reversed_at TIMESTAMPTZ');
+  await pool.query('ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS related_transaction_id BIGINT');
+  await pool.query(
+    'ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS notification_dismissed BOOLEAN NOT NULL DEFAULT FALSE'
+  );
   const salt = crypto.randomBytes(16).toString('hex');
   const id = crypto.randomUUID();
   const inserted = await pool.query(
@@ -343,7 +421,16 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
       );
       return rows;
     },
-    async transact({ customerId, type, amount, description, actor, createdAt = nowIso(), showDate = true }) {
+    async transact({
+      customerId,
+      type,
+      amount,
+      description,
+      actor,
+      createdAt = nowIso(),
+      showDate = true,
+      reversalDueAt = null
+    }) {
       const cents = money(amount);
       if (!Number.isSafeInteger(cents) || cents <= 0) return { error: 'invalid_amount' };
       const debit = type === 'withdrawal' || type === 'debit' || type === 'payment';
@@ -364,8 +451,8 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
           [customerId, debit ? -cents : cents]
         );
         const tx = await client.query(
-          'INSERT INTO bank_transactions (customer_id,type,amount_cents,description,actor,show_date,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id,customer_id AS "customerId",type,amount_cents::float/100 AS amount,description,actor,show_date AS "showDate",created_at AS "createdAt"',
-          [customerId, type, cents, description, actor, showDate, createdAt]
+          'INSERT INTO bank_transactions (customer_id,type,amount_cents,description,actor,show_date,created_at,reversal_due_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,customer_id AS "customerId",type,amount_cents::float/100 AS amount,description,actor,show_date AS "showDate",created_at AS "createdAt",reversal_due_at AS "reversalDueAt"',
+          [customerId, type, cents, description, actor, showDate, createdAt, reversalDueAt]
         );
         await client.query('COMMIT');
         return { customer: publicCustomer(updated.rows[0]), transaction: tx.rows[0] };
@@ -375,6 +462,57 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
       } finally {
         client.release();
       }
+    },
+    async processDueReversals(customerId) {
+      const client = await pool.connect();
+      const reversals = [];
+      try {
+        await client.query('BEGIN');
+        const pending = await client.query(
+          "SELECT id,amount_cents,description FROM bank_transactions WHERE customer_id=$1 AND type='withdrawal' AND reversal_due_at<=NOW() AND reversed_at IS NULL FOR UPDATE",
+          [customerId]
+        );
+        for (const transaction of pending.rows) {
+          const createdAt = nowIso();
+          await client.query('UPDATE bank_customers SET balance_cents=balance_cents+$2 WHERE id=$1', [
+            customerId,
+            transaction.amount_cents
+          ]);
+          const reversal = await client.query(
+            "INSERT INTO bank_transactions (customer_id,type,amount_cents,description,actor,related_transaction_id,created_at) VALUES ($1,'reversal',$2,$3,'system',$4,$5) RETURNING id,customer_id AS \"customerId\",type,amount_cents::float/100 AS amount,description,actor,related_transaction_id AS \"relatedTransactionId\",created_at AS \"createdAt\"",
+            [
+              customerId,
+              transaction.amount_cents,
+              `Returned transfer: ${transaction.description}`.slice(0, 180),
+              transaction.id,
+              createdAt
+            ]
+          );
+          await client.query('UPDATE bank_transactions SET reversed_at=$2 WHERE id=$1', [transaction.id, createdAt]);
+          reversals.push(reversal.rows[0]);
+        }
+        await client.query('COMMIT');
+        return reversals;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+    async getNotifications(customerId) {
+      const { rows } = await pool.query(
+        "SELECT id,'transfer_reversed' AS type,amount_cents::float/100 AS amount,related_transaction_id AS \"relatedTransactionId\",created_at AS \"createdAt\" FROM bank_transactions WHERE customer_id=$1 AND type='reversal' AND notification_dismissed=FALSE ORDER BY id",
+        [customerId]
+      );
+      return rows;
+    },
+    async dismissNotification(customerId, notificationId) {
+      const result = await pool.query(
+        "UPDATE bank_transactions SET notification_dismissed=TRUE WHERE id=$1 AND customer_id=$2 AND type='reversal'",
+        [notificationId, customerId]
+      );
+      return result.rowCount === 1;
     },
     async getMessages(customerId, after = 0) {
       const { rows } = await pool.query(

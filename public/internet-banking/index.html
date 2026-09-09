@@ -157,5 +157,44 @@
         ><button id="contact-blocked-operation-support" class="primary" type="button">Contact support</button>
       </div>
     </dialog>
+
+    <dialog id="receipt-dialog" class="receipt-dialog" aria-labelledby="receipt-title">
+      <button id="close-receipt" class="receipt-close" type="button" aria-label="Close receipt">×</button>
+      <div class="receipt-success-icon" aria-hidden="true">✓</div>
+      <p class="eyebrow">Transfer completed</p>
+      <h2 id="receipt-title">Your transfer was successful</h2>
+      <p class="receipt-intro">The money has been debited from your account.</p>
+      <div class="receipt-card">
+        <div class="receipt-amount"><small>AMOUNT SENT</small><strong id="receipt-amount">$0.00</strong></div>
+        <dl>
+          <div><dt>Recipient name</dt><dd id="receipt-recipient"></dd></div>
+          <div><dt>Recipient account</dt><dd id="receipt-recipient-account"></dd></div>
+          <div><dt>Date and time</dt><dd id="receipt-date"></dd></div>
+          <div><dt>Reference</dt><dd id="receipt-reference"></dd></div>
+          <div><dt>Receipt number</dt><dd id="receipt-number"></dd></div>
+          <div><dt>Available balance</dt><dd id="receipt-balance"></dd></div>
+        </dl>
+      </div>
+      <div class="receipt-actions">
+        <button id="download-receipt" class="primary" type="button">Download PDF</button>
+        <button id="done-receipt" type="button">Done</button>
+      </div>
+    </dialog>
+
+    <dialog id="refund-dialog" class="refund-dialog" aria-labelledby="refund-title">
+      <div class="refund-icon" aria-hidden="true">↩</div>
+      <p class="eyebrow">Balance restored</p>
+      <h2 id="refund-title">Your transfer was returned</h2>
+      <p>The transfer could not be completed. The full amount has been credited back to your account.</p>
+      <div class="refund-summary">
+        <div><small>AMOUNT RETURNED</small><strong id="refund-amount">$0.00</strong></div>
+        <dl>
+          <div><dt>Original transfer</dt><dd id="refund-transfer-number"></dd></div>
+          <div><dt>Returned on</dt><dd id="refund-date"></dd></div>
+          <div><dt>Available balance</dt><dd id="refund-balance"></dd></div>
+        </dl>
+      </div>
+      <button id="accept-refund" class="primary refund-accept" type="button">Accept</button>
+    </dialog>
   </body>
 </html>
