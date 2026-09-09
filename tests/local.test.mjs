@@ -319,6 +319,29 @@ test('customer transactions are blocked while operator adjustments and banking m
   ).json();
   assert.equal(customers.customers.length, 2);
   const id = customers.customers[0].id;
+  const invalidCardEdit = await fetch(`${base}/api/operator/customers/${id}/card-number`, {
+    method: 'PATCH',
+    headers: { cookie: operatorCookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ cardNumber: '1234' })
+  });
+  assert.equal(invalidCardEdit.status, 400);
+  const cardEdit = await fetch(`${base}/api/operator/customers/${id}/card-number`, {
+    method: 'PATCH',
+    headers: { cookie: operatorCookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ cardNumber: '5555666677778888' })
+  });
+  assert.equal(cardEdit.status, 200);
+  assert.equal((await cardEdit.json()).customer.cardNumber, '5555 6666 7777 8888');
+  const customerAfterCardEdit = await (
+    await fetch(base + '/api/banking/me', { headers: { cookie: customerCookie } })
+  ).json();
+  assert.equal(customerAfterCardEdit.customer.cardNumber, '5555 6666 7777 8888');
+  const duplicateCardEdit = await fetch(`${base}/api/operator/customers/${id}/card-number`, {
+    method: 'PATCH',
+    headers: { cookie: operatorCookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ cardNumber: createdCustomerData.customer.cardNumber })
+  });
+  assert.equal(duplicateCardEdit.status, 409);
   const credit = await fetch(`${base}/api/operator/customers/${id}/transactions`, {
     method: 'POST',
     headers: { cookie: operatorCookie, 'content-type': 'application/json' },

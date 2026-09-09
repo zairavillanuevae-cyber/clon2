@@ -532,6 +532,54 @@ textarea {
   font-weight: 700;
   cursor: pointer;
 }
+.banking-identifiers .card-number-field {
+  padding: 0;
+}
+.card-number-display {
+  position: relative;
+  padding: 16px 86px 16px 16px;
+}
+.banking-identifiers .card-number-display button {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  padding: 7px 9px;
+  background: transparent;
+  color: var(--red);
+  border: 1px solid #c9182444;
+  font-size: 11px;
+}
+#card-number-form {
+  padding: 11px 12px;
+}
+#card-number-form label {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+#card-number-form input {
+  width: 100%;
+  margin: 5px 0 7px;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font: inherit;
+}
+#card-number-form > div {
+  display: flex;
+  gap: 6px;
+}
+.banking-identifiers #card-number-form button {
+  padding: 6px 8px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 11px;
+}
+.banking-identifiers #card-number-form #cancel-card-number {
+  background: var(--soft);
+  color: var(--ink);
+}
 .metric {
   background: #fff;
   padding: 24px;

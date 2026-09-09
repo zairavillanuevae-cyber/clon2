@@ -93,6 +93,12 @@ function validCustomer(req, secret) {
   }
 }
 const cleanText = (value, max) => (typeof value === 'string' ? value.trim().replace(/\0/g, '').slice(0, max) : '');
+const normalizeCardNumber = (value) => {
+  const raw = cleanText(value, 32);
+  if (!/^[\d\s-]+$/.test(raw)) return '';
+  const digits = raw.replace(/\D/g, '');
+  return digits.length === 16 ? digits.match(/.{4}/g).join(' ') : '';
+};
 
 export function createServer(options = {}) {
   const store = options.store || createMemoryChatStore();
@@ -135,7 +141,7 @@ export function createServer(options = {}) {
           const currency = cleanText(body.currency, 3).toUpperCase() || 'USD';
           const openingBalance = Number(body.openingBalance ?? 0);
           const requestedAccountNumber = cleanText(body.accountNumber, 40).toUpperCase();
-          const requestedCardNumber = cleanText(body.cardNumber, 24).replace(/\s+/g, ' ');
+          const requestedCardNumber = body.cardNumber ? normalizeCardNumber(body.cardNumber) : '';
           const requestedCardExpiry = cleanText(body.cardExpiry, 5);
           const requestedCardCvv = cleanText(body.cardCvv, 4);
           if (name.length < 2) return sendJson(res, 400, { error: 'Enter the customer name.' });
@@ -150,7 +156,7 @@ export function createServer(options = {}) {
             return sendJson(res, 400, { error: 'Enter a valid opening balance.' });
           if (requestedAccountNumber && !/^[A-Z0-9 -]{8,40}$/.test(requestedAccountNumber))
             return sendJson(res, 400, { error: 'Enter a valid account number or IBAN.' });
-          if (requestedCardNumber && !/^(?:\d{4} ){3}\d{4}$/.test(requestedCardNumber))
+          if (body.cardNumber && !requestedCardNumber)
             return sendJson(res, 400, { error: 'Card number must contain 16 digits.' });
           if (requestedCardExpiry && !/^(0[1-9]|1[0-2])\/\d{2}$/.test(requestedCardExpiry))
             return sendJson(res, 400, { error: 'Expiry must use MM/YY.' });
@@ -172,7 +178,7 @@ export function createServer(options = {}) {
           return sendJson(res, 201, result);
         }
         const customerMatch = pathname.match(
-          /^\/api\/operator\/customers\/([0-9a-f-]+)(?:\/(transactions|messages|card-status))?$/i
+          /^\/api\/operator\/customers\/([0-9a-f-]+)(?:\/(transactions|messages|card-status|card-number))?$/i
         );
         if (customerMatch) {
           const customer = await bankStore.getCustomer(customerMatch[1]);
@@ -225,6 +231,16 @@ export function createServer(options = {}) {
             if (!['active', 'frozen'].includes(body.status))
               return sendJson(res, 400, { error: 'Invalid card status.' });
             return sendJson(res, 200, { customer: await bankStore.setCardStatus(customer.id, body.status) });
+          }
+          if (req.method === 'PATCH' && customerMatch[2] === 'card-number') {
+            const body = await readJson(req);
+            const newCardNumber = normalizeCardNumber(body.cardNumber);
+            if (!newCardNumber) return sendJson(res, 400, { error: 'Card number must contain 16 digits.' });
+            const result = await bankStore.setCardNumber(customer.id, newCardNumber);
+            if (result.error === 'card_number_exists')
+              return sendJson(res, 409, { error: 'That card number is already assigned to another customer.' });
+            if (result.error) return sendJson(res, 404, { error: 'Customer not found.' });
+            return sendJson(res, 200, result);
           }
         }
         const match = pathname.match(/^\/api\/operator\/sessions\/([0-9a-f-]+)\/(messages|status)$/i);

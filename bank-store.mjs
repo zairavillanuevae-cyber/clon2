@@ -135,6 +135,14 @@ export function createMemoryBankStore({
       row.card_status = status;
       return publicCustomer(row);
     },
+    async setCardNumber(id, newCardNumber) {
+      const row = customers.get(id);
+      if (!row?.active) return { error: 'not_found' };
+      if ([...customers.values()].some((item) => item.id !== id && item.card_number === newCardNumber))
+        return { error: 'card_number_exists' };
+      row.card_number = newCardNumber;
+      return { customer: publicCustomer(row) };
+    },
     async getTransactions(id, limit = 100) {
       return transactions
         .filter((item) => item.customerId === id)
@@ -315,6 +323,18 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
         [id, status]
       );
       return rows[0] ? publicCustomer(rows[0]) : null;
+    },
+    async setCardNumber(id, newCardNumber) {
+      try {
+        const { rows } = await pool.query(
+          'UPDATE bank_customers SET card_number=$2 WHERE id=$1 AND active=TRUE RETURNING *',
+          [id, newCardNumber]
+        );
+        return rows[0] ? { customer: publicCustomer(rows[0]) } : { error: 'not_found' };
+      } catch (error) {
+        if (error.code === '23505') return { error: 'card_number_exists' };
+        throw error;
+      }
     },
     async getTransactions(customerId, limit = 100) {
       const { rows } = await pool.query(

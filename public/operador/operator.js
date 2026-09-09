@@ -101,6 +101,12 @@ function maskCard(value) {
     .replace(/\s/g, '')
     .slice(-4)}`;
 }
+function formatCardNumber(value) {
+  return String(value || '')
+    .replace(/\D/g, '')
+    .slice(0, 16)
+    .replace(/(.{4})(?=.)/g, '$1 ');
+}
 async function selectCustomer(id) {
   state.selected = id;
   renderCustomers();
@@ -109,7 +115,7 @@ async function selectCustomer(id) {
     state.currency = data.customer.currency;
     const withdrawals = data.transactions.filter((x) => x.type === 'withdrawal');
     $('#detail').innerHTML =
-      `<div class="customer-head"><div><h2>${escape(data.customer.name)}</h2><p>${escape(data.customer.username)} · ${escape(data.customer.accountNumber)}</p></div><div class="account-chip"><span>${money(data.customer.balance)}</span><small>Available balance</small></div></div><div class="metrics"><div class="metric"><small>Current balance</small><strong>${money(data.customer.balance)}</strong></div><div class="metric"><small>Transactions</small><strong>${data.transactions.length}</strong></div><div class="metric"><small>Withdrawals</small><strong>${withdrawals.length}</strong></div></div><section class="banking-identifiers"><div><small>Demo account / IBAN</small><strong>${escape(data.customer.accountNumber)}</strong></div><div><small>Demo card</small><strong>${escape(maskCard(data.customer.cardNumber))}</strong></div><div><small>Demo validity · code</small><strong>${escape(data.customer.cardExpiry)} · ${escape(data.customer.cardCvv)}</strong></div><button id="operator-card-status" type="button">${data.customer.cardStatus === 'frozen' ? 'Unfreeze card' : 'Freeze card'}</button></section><div class="detail-grid account-detail-grid"><section class="block"><h3>Recent activity</h3><div class="transaction-list">${data.transactions.map(txRow).join('') || '<p>No transactions yet.</p>'}</div></section><aside class="block actions"><h3>Adjust balance</h3><form id="balance-form"><div class="segmented"><label><input type="radio" name="type" value="credit" checked>Credit</label><label><input type="radio" name="type" value="debit">Debit</label></div><input name="amount" type="number" min="0.01" step="0.01" placeholder="Amount in ${escape(data.customer.currency)}" required><textarea name="description" maxlength="180" rows="2" placeholder="Adjustment reason"></textarea><fieldset class="date-options"><legend>Date and time</legend><label><input type="radio" name="dateMode" value="hidden" checked><span><strong>Hide date</strong><small>Do not show a date or time</small></span></label><label><input type="radio" name="dateMode" value="manual"><span><strong>Set manually</strong><small>Choose the date and time</small></span></label></fieldset><label class="manual-date" hidden><span>Transaction date and time</span><input name="createdAt" type="datetime-local" step="60"></label><button class="primary" type="submit">Apply transaction</button></form></aside></div>`;
+      `<div class="customer-head"><div><h2>${escape(data.customer.name)}</h2><p>${escape(data.customer.username)} · ${escape(data.customer.accountNumber)}</p></div><div class="account-chip"><span>${money(data.customer.balance)}</span><small>Available balance</small></div></div><div class="metrics"><div class="metric"><small>Current balance</small><strong>${money(data.customer.balance)}</strong></div><div class="metric"><small>Transactions</small><strong>${data.transactions.length}</strong></div><div class="metric"><small>Withdrawals</small><strong>${withdrawals.length}</strong></div></div><section class="banking-identifiers"><div><small>Demo account / IBAN</small><strong>${escape(data.customer.accountNumber)}</strong></div><div class="card-number-field"><div class="card-number-display"><small>Demo card</small><strong>${escape(maskCard(data.customer.cardNumber))}</strong><button id="edit-card-number" type="button">Edit number</button></div><form id="card-number-form" hidden><label for="card-number-input">Card number</label><input id="card-number-input" name="cardNumber" value="${escape(data.customer.cardNumber)}" inputmode="numeric" autocomplete="off" maxlength="19" pattern="[0-9]{4}( [0-9]{4}){3}" required><div><button class="save-card-number" type="submit">Save</button><button id="cancel-card-number" type="button">Cancel</button></div></form></div><div><small>Demo validity · code</small><strong>${escape(data.customer.cardExpiry)} · ${escape(data.customer.cardCvv)}</strong></div><button id="operator-card-status" type="button">${data.customer.cardStatus === 'frozen' ? 'Unfreeze card' : 'Freeze card'}</button></section><div class="detail-grid account-detail-grid"><section class="block"><h3>Recent activity</h3><div class="transaction-list">${data.transactions.map(txRow).join('') || '<p>No transactions yet.</p>'}</div></section><aside class="block actions"><h3>Adjust balance</h3><form id="balance-form"><div class="segmented"><label><input type="radio" name="type" value="credit" checked>Credit</label><label><input type="radio" name="type" value="debit">Debit</label></div><input name="amount" type="number" min="0.01" step="0.01" placeholder="Amount in ${escape(data.customer.currency)}" required><textarea name="description" maxlength="180" rows="2" placeholder="Adjustment reason"></textarea><fieldset class="date-options"><legend>Date and time</legend><label><input type="radio" name="dateMode" value="hidden" checked><span><strong>Hide date</strong><small>Do not show a date or time</small></span></label><label><input type="radio" name="dateMode" value="manual"><span><strong>Set manually</strong><small>Choose the date and time</small></span></label></fieldset><label class="manual-date" hidden><span>Transaction date and time</span><input name="createdAt" type="datetime-local" step="60"></label><button class="primary" type="submit">Apply transaction</button></form></aside></div>`;
     wireForms();
     fail();
   } catch (e) {
@@ -137,6 +143,38 @@ function wireForms() {
   deleteButton.textContent = 'Delete customer';
   deleteButton.onclick = deleteSelectedCustomer;
   $('.account-chip').append(deleteButton);
+  const cardNumberDisplay = $('.card-number-display');
+  const cardNumberForm = $('#card-number-form');
+  const cardNumberInput = $('#card-number-input');
+  $('#edit-card-number').onclick = () => {
+    cardNumberDisplay.hidden = true;
+    cardNumberForm.hidden = false;
+    cardNumberInput.focus();
+    cardNumberInput.select();
+  };
+  $('#cancel-card-number').onclick = () => {
+    cardNumberInput.value = cardNumberInput.defaultValue;
+    cardNumberForm.hidden = true;
+    cardNumberDisplay.hidden = false;
+    fail();
+  };
+  cardNumberInput.oninput = () => {
+    cardNumberInput.value = formatCardNumber(cardNumberInput.value);
+  };
+  cardNumberForm.onsubmit = async (event) => {
+    event.preventDefault();
+    try {
+      await api(`/api/operator/customers/${state.selected}/card-number`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cardNumber: cardNumberInput.value })
+      });
+      await loadCustomers();
+    } catch (e) {
+      fail(e.message);
+      cardNumberInput.focus();
+    }
+  };
   $('#operator-card-status').onclick = async () => {
     const current = state.customers.find((item) => item.id === state.selected);
     await api(`/api/operator/customers/${state.selected}/card-status`, {
