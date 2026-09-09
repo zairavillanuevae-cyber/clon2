@@ -127,6 +127,13 @@
         </div>
         <div class="messages" id="support-messages" role="log" aria-live="polite"></div>
         <form class="message-form" id="message-form">
+          <input
+            id="bank-chat-attachment"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif,.pdf,.txt,.csv,.docx,.xlsx"
+            hidden
+          />
+          <button class="message-attach" type="button" aria-label="Attach file" title="Attach file">📎</button>
           <textarea
             name="text"
             maxlength="2000"
@@ -135,7 +142,7 @@
             aria-label="Message support"
             required
           ></textarea>
-          <button aria-label="Send message">Send</button>
+          <button type="submit" aria-label="Send message">Send</button>
         </form>
       </section>
 

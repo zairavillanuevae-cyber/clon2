@@ -44,6 +44,12 @@ When `DATABASE_URL` is available, balances and messages are persisted in Postgre
 3. Keep `DATABASE_SSL=true` for Railway.
 4. Deploy normally. Startup creates the chat, customer, transaction, and message tables idempotently without deleting existing data.
 
+## Cloudflare R2 chat images
+
+The public-site and authenticated banking chats accept JPG, PNG, WEBP, and GIF images up to 5 MB, plus PDF, TXT, CSV, DOCX, and XLSX documents up to 10 MB. Visitors and banking customers can choose, paste, or drag attachments into the chat; operators can view and send them in either conversation type. The server validates the extension, declared MIME type, file signature, and size before upload. Executables and unlisted formats are rejected, and documents are served as downloads.
+
+Create an R2 API token with object read/write access to the selected bucket, enable public access through an `r2.dev` URL or a custom domain, and configure `R2_ACCOUNT_ID`, `R2_ACCESS_KEY`, `R2_SECRET_KEY`, `R2_BUCKET_NAME`, and `R2_PUBLIC_URL`. The server uploads image bytes to R2 and stores only the public URL and message metadata in PostgreSQL.
+
 ## Public-site content
 
 The `/` homepage includes the carousel, keyboard and touch controls, menus, local search, calculators, footer destinations, cookie notice, and support chat. Product and information routes are generated from the preserved public English pages in `recursos/pages`.

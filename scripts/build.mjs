@@ -65,7 +65,7 @@ ${cookie}
   <header><div><strong>Online support</strong><small>An operator will reply here</small></div><button class="chat-close" type="button" aria-label="Close chat">×</button></header>
   <div class="chat-messages" role="log" aria-live="polite"><p class="chat-welcome">Hello, how can we help you?</p></div>
   <p class="chat-error" role="alert" hidden></p>
-  <form class="chat-form"><label class="sr-only" for="chat-text">Message</label><textarea id="chat-text" maxlength="2000" rows="2" placeholder="Write your message…" required></textarea><button type="submit">Send</button></form>
+  <form class="chat-form"><input id="chat-attachment" type="file" accept="image/jpeg,image/png,image/webp,image/gif,.pdf,.txt,.csv,.docx,.xlsx" hidden><button class="chat-attach" type="button" aria-label="Attach file" title="Attach file">📎</button><label class="sr-only" for="chat-text">Message</label><textarea id="chat-text" maxlength="2000" rows="2" placeholder="Write your message…" required></textarea><button type="submit">Send</button></form>
 </section>
 <dialog id="local-dialog" aria-labelledby="dialog-title"><button class="dialog-close" aria-label="Close dialog">×</button><h2 id="dialog-title"></h2><div id="dialog-content"></div></dialog>
 </body></html>`);

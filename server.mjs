@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createChatStore, createMemoryChatStore } from './chat-store.mjs';
 import { createBankStore, createMemoryBankStore } from './bank-store.mjs';
+import { cleanImageName, createR2Storage, MAX_FILE_BYTES, validateAttachment } from './r2-storage.mjs';
 
 const root = fileURLToPath(new URL('./public/', import.meta.url));
 const mime = {
@@ -23,8 +24,8 @@ const mime = {
   '.woff2': 'font/woff2',
   '.otf': 'font/otf'
 };
-const csp =
-  "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'";
+const csp = (imageOrigin = '') =>
+  `default-src 'self'; img-src 'self' data:${imageOrigin ? ` ${imageOrigin}` : ''}; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'`;
 const jsonHeaders = {
   'Content-Type': 'application/json; charset=utf-8',
   'Cache-Control': 'no-store',
@@ -52,6 +53,19 @@ async function readJson(req) {
   } catch {
     throw Object.assign(new Error('Invalid JSON'), { status: 400 });
   }
+}
+async function readAttachment(req) {
+  const declaredLength = Number(req.headers['content-length'] || 0);
+  if (declaredLength > MAX_FILE_BYTES)
+    throw Object.assign(new Error('The file must be 10 MB or smaller.'), { status: 413 });
+  const chunks = [];
+  let length = 0;
+  for await (const chunk of req) {
+    length += chunk.length;
+    if (length > MAX_FILE_BYTES) throw Object.assign(new Error('The file must be 10 MB or smaller.'), { status: 413 });
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks, length);
 }
 function cookie(req, name) {
   for (const part of (req.headers.cookie || '').split(';')) {
@@ -103,12 +117,52 @@ const normalizeCardNumber = (value) => {
 export function createServer(options = {}) {
   const store = options.store || createMemoryChatStore();
   const bankStore = options.bankStore || createMemoryBankStore();
+  const imageStorage = options.imageStorage === undefined ? createR2Storage() : options.imageStorage;
+  const contentSecurityPolicy = csp(imageStorage?.publicOrigin);
   const operatorKey = options.operatorKey ?? process.env.OPERATOR_KEY ?? '';
   const transferReversalDelayMs = Number.isFinite(options.transferReversalDelayMs)
     ? Math.max(0, options.transferReversalDelayMs)
     : 120_000;
   const sessionSecret =
     options.sessionSecret || process.env.BANK_SESSION_SECRET || operatorKey || crypto.randomBytes(32).toString('hex');
+
+  const addAttachmentMessage = async (req, ownerId, saveMessage) => {
+    if (!imageStorage) throw Object.assign(new Error('File uploads are not configured.'), { status: 503 });
+    const data = await readAttachment(req);
+    const fileName = cleanImageName(req.headers['x-file-name']);
+    const { kind, contentType, extension } = validateAttachment(data, req.headers['content-type'], fileName);
+    const uploaded = await imageStorage.uploadAttachment({
+      data,
+      contentType,
+      extension,
+      sessionId: ownerId,
+      fileName,
+      kind
+    });
+    let message;
+    try {
+      message = await saveMessage({
+        body: fileName,
+        type: kind,
+        imageUrl: kind === 'image' ? uploaded.url : null,
+        fileUrl: kind === 'file' ? uploaded.url : null,
+        mimeType: contentType,
+        fileSize: data.length
+      });
+    } catch (error) {
+      try {
+        await imageStorage.deleteAttachment?.(uploaded.key);
+      } catch {}
+      throw error;
+    }
+    if (!message) {
+      try {
+        await imageStorage.deleteAttachment?.(uploaded.key);
+      } catch {}
+    }
+    return message;
+  };
+
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
@@ -181,7 +235,7 @@ export function createServer(options = {}) {
           return sendJson(res, 201, result);
         }
         const customerMatch = pathname.match(
-          /^\/api\/operator\/customers\/([0-9a-f-]+)(?:\/(transactions|messages|card-status|card-number))?$/i
+          /^\/api\/operator\/customers\/([0-9a-f-]+)(?:\/(transactions|messages|uploads|card-status|card-number))?$/i
         );
         if (customerMatch) {
           const customer = await bankStore.getCustomer(customerMatch[1]);
@@ -229,6 +283,12 @@ export function createServer(options = {}) {
               message: await bankStore.addMessage({ customerId: customer.id, sender: 'operator', body: text })
             });
           }
+          if (req.method === 'POST' && customerMatch[2] === 'uploads') {
+            const message = await addAttachmentMessage(req, customer.id, (attachment) =>
+              bankStore.addMessage({ customerId: customer.id, sender: 'operator', ...attachment })
+            );
+            return sendJson(res, 201, { message });
+          }
           if (req.method === 'PATCH' && customerMatch[2] === 'card-status') {
             const body = await readJson(req);
             if (!['active', 'frozen'].includes(body.status))
@@ -246,7 +306,7 @@ export function createServer(options = {}) {
             return sendJson(res, 200, result);
           }
         }
-        const match = pathname.match(/^\/api\/operator\/sessions\/([0-9a-f-]+)\/(messages|status)$/i);
+        const match = pathname.match(/^\/api\/operator\/sessions\/([0-9a-f-]+)\/(messages|uploads|status)$/i);
         if (match && req.method === 'GET' && match[2] === 'messages') {
           const session = await store.getSession(match[1]);
           if (!session) return sendJson(res, 404, { error: 'Conversation not found.' });
@@ -260,6 +320,13 @@ export function createServer(options = {}) {
           const text = cleanText(body.text, 2000);
           if (!text) return sendJson(res, 400, { error: 'Enter a message.' });
           const message = await store.addMessage({ sessionId: match[1], sender: 'operator', body: text });
+          return message ? sendJson(res, 201, { message }) : sendJson(res, 404, { error: 'Conversation not found.' });
+        }
+        if (match && req.method === 'POST' && match[2] === 'uploads') {
+          if (!(await store.getSession(match[1]))) return sendJson(res, 404, { error: 'Conversation not found.' });
+          const message = await addAttachmentMessage(req, match[1], (attachment) =>
+            store.addMessage({ sessionId: match[1], sender: 'operator', ...attachment })
+          );
           return message ? sendJson(res, 201, { message }) : sendJson(res, 404, { error: 'Conversation not found.' });
         }
         if (match && req.method === 'PATCH' && match[2] === 'status') {
@@ -347,6 +414,12 @@ export function createServer(options = {}) {
             message: await bankStore.addMessage({ customerId, sender: 'customer', body: text })
           });
         }
+        if (pathname === '/api/banking/uploads' && req.method === 'POST') {
+          const message = await addAttachmentMessage(req, customerId, (attachment) =>
+            bankStore.addMessage({ customerId, sender: 'customer', ...attachment })
+          );
+          return sendJson(res, 201, { message });
+        }
         return sendJson(res, 404, { error: 'Route not found.' });
       }
       if (pathname === '/api/chat/sessions' && req.method === 'POST') {
@@ -358,15 +431,22 @@ export function createServer(options = {}) {
         });
         return sendJson(res, 201, { session, token });
       }
-      const chatMatch = pathname.match(/^\/api\/chat\/sessions\/([0-9a-f-]+)\/messages$/i);
+      const chatMatch = pathname.match(/^\/api\/chat\/sessions\/([0-9a-f-]+)\/(messages|uploads)$/i);
       if (chatMatch && ['GET', 'POST'].includes(req.method)) {
         const token = req.headers['x-chat-token'] || '';
         if (!token || !(await store.verifyVisitor(chatMatch[1], hash(String(token)))))
           return sendJson(res, 401, { error: 'Invalid chat session.' });
-        if (req.method === 'GET')
+        if (req.method === 'GET' && chatMatch[2] === 'messages')
           return sendJson(res, 200, {
             messages: await store.getMessages(chatMatch[1], Number(url.searchParams.get('after')) || 0)
           });
+        if (req.method === 'POST' && chatMatch[2] === 'uploads') {
+          const message = await addAttachmentMessage(req, chatMatch[1], (attachment) =>
+            store.addMessage({ sessionId: chatMatch[1], sender: 'visitor', ...attachment })
+          );
+          return message ? sendJson(res, 201, { message }) : sendJson(res, 404, { error: 'Conversation not found.' });
+        }
+        if (req.method !== 'POST') return sendJson(res, 405, { error: 'Method not allowed.' });
         const body = await readJson(req);
         const text = cleanText(body.text, 2000);
         if (!text) return sendJson(res, 400, { error: 'Enter a message.' });
@@ -400,7 +480,7 @@ export function createServer(options = {}) {
           'Content-Length': info.size,
           'X-Content-Type-Options': 'nosniff',
           'Referrer-Policy': 'no-referrer',
-          'Content-Security-Policy': csp,
+          'Content-Security-Policy': contentSecurityPolicy,
           'Cache-Control': 'no-cache'
         });
         if (req.method === 'HEAD') return res.end();
@@ -412,7 +492,7 @@ export function createServer(options = {}) {
         res.end(req.method === 'HEAD' ? '' : 'Page not found.');
       }
     } catch (error) {
-      console.error(error);
+      if (!error.status || error.status >= 500) console.error(error);
       if (!res.headersSent)
         sendJson(res, error.status || 500, { error: error.status ? error.message : 'Error interno.' });
       else res.end();

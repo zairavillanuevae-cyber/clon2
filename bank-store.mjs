@@ -245,9 +245,29 @@ export function createMemoryBankStore({
     async getMessages(id, after = 0) {
       return messages.filter((item) => item.customerId === id && item.id > after);
     },
-    async addMessage({ customerId, sender, body }) {
+    async addMessage({
+      customerId,
+      sender,
+      body,
+      type = 'text',
+      imageUrl = null,
+      fileUrl = null,
+      mimeType = null,
+      fileSize = null
+    }) {
       if (!customers.has(customerId)) return null;
-      const row = { id: ++messageId, customerId, sender, body, createdAt: nowIso() };
+      const row = {
+        id: ++messageId,
+        customerId,
+        sender,
+        body,
+        type,
+        imageUrl,
+        fileUrl,
+        mimeType,
+        fileSize,
+        createdAt: nowIso()
+      };
       messages.push(row);
       return row;
     }
@@ -283,6 +303,8 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
     CREATE TABLE IF NOT EXISTS bank_messages (
       id BIGSERIAL PRIMARY KEY, customer_id UUID NOT NULL REFERENCES bank_customers(id),
       sender VARCHAR(20) NOT NULL CHECK (sender IN ('customer','operator')), body VARCHAR(2000) NOT NULL,
+      type VARCHAR(16) NOT NULL DEFAULT 'text' CHECK (type IN ('text','image','file')), image_url TEXT,
+      file_url TEXT, mime_type VARCHAR(160), file_size BIGINT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS bank_transactions_customer_idx ON bank_transactions(customer_id, id DESC);
@@ -301,6 +323,15 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
   await pool.query('ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS related_transaction_id BIGINT');
   await pool.query(
     'ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS notification_dismissed BOOLEAN NOT NULL DEFAULT FALSE'
+  );
+  await pool.query("ALTER TABLE bank_messages ADD COLUMN IF NOT EXISTS type VARCHAR(16) NOT NULL DEFAULT 'text'");
+  await pool.query('ALTER TABLE bank_messages ADD COLUMN IF NOT EXISTS image_url TEXT');
+  await pool.query('ALTER TABLE bank_messages ADD COLUMN IF NOT EXISTS file_url TEXT');
+  await pool.query('ALTER TABLE bank_messages ADD COLUMN IF NOT EXISTS mime_type VARCHAR(160)');
+  await pool.query('ALTER TABLE bank_messages ADD COLUMN IF NOT EXISTS file_size BIGINT');
+  await pool.query('ALTER TABLE bank_messages DROP CONSTRAINT IF EXISTS bank_messages_type_check');
+  await pool.query(
+    "ALTER TABLE bank_messages ADD CONSTRAINT bank_messages_type_check CHECK (type IN ('text','image','file'))"
   );
   const salt = crypto.randomBytes(16).toString('hex');
   const id = crypto.randomUUID();
@@ -516,15 +547,24 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
     },
     async getMessages(customerId, after = 0) {
       const { rows } = await pool.query(
-        'SELECT id,customer_id AS "customerId",sender,body,created_at AS "createdAt" FROM bank_messages WHERE customer_id=$1 AND id>$2 ORDER BY id LIMIT 500',
+        'SELECT id,customer_id AS "customerId",sender,body,type,image_url AS "imageUrl",file_url AS "fileUrl",mime_type AS "mimeType",file_size AS "fileSize",created_at AS "createdAt" FROM bank_messages WHERE customer_id=$1 AND id>$2 ORDER BY id LIMIT 500',
         [customerId, after]
       );
       return rows;
     },
-    async addMessage({ customerId, sender, body }) {
+    async addMessage({
+      customerId,
+      sender,
+      body,
+      type = 'text',
+      imageUrl = null,
+      fileUrl = null,
+      mimeType = null,
+      fileSize = null
+    }) {
       const { rows } = await pool.query(
-        'INSERT INTO bank_messages (customer_id,sender,body) VALUES ($1,$2,$3) RETURNING id,customer_id AS "customerId",sender,body,created_at AS "createdAt"',
-        [customerId, sender, body]
+        'INSERT INTO bank_messages (customer_id,sender,body,type,image_url,file_url,mime_type,file_size) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,customer_id AS "customerId",sender,body,type,image_url AS "imageUrl",file_url AS "fileUrl",mime_type AS "mimeType",file_size AS "fileSize",created_at AS "createdAt"',
+        [customerId, sender, body, type, imageUrl, fileUrl, mimeType, fileSize]
       );
       return rows[0] || null;
     }

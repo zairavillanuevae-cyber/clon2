@@ -104,9 +104,9 @@ function transactionLabel(type) {
       ? 'Transfer'
       : type === 'reversal'
         ? 'Returned transfer'
-      : type === 'opening'
-        ? 'Opening balance'
-        : 'Credit';
+        : type === 'opening'
+          ? 'Opening balance'
+          : 'Credit';
 }
 function txRow(transaction) {
   const debit = ['withdrawal', 'debit', 'payment'].includes(transaction.type);
@@ -121,7 +121,13 @@ function txRow(transaction) {
   </article>`;
 }
 function messageRow(message) {
-  return `<p class="message ${escape(message.sender)}">${escape(message.body)}<time>${date(message.createdAt)}</time></p>`;
+  const content =
+    message.type === 'image' && message.imageUrl
+      ? `<a class="message-image" href="${escape(message.imageUrl)}" target="_blank" rel="noopener noreferrer"><img src="${escape(message.imageUrl)}" alt="${escape(message.body || 'Chat image')}" loading="lazy" referrerpolicy="no-referrer"></a>`
+      : message.type === 'file' && message.fileUrl
+        ? `<a class="message-file" href="${escape(message.fileUrl)}" target="_blank" rel="noopener noreferrer" download="${escape(message.body || 'attachment')}"><span aria-hidden="true">📄</span><span><strong>${escape(message.body || 'Attachment')}</strong><small>${message.fileSize ? `${Math.ceil(Number(message.fileSize) / 1024)} KB` : 'Download file'}</small></span></a>`
+        : escape(message.body);
+  return `<div class="message ${escape(message.sender)}${['image', 'file'].includes(message.type) ? ` ${message.type}` : ''}">${content}<time>${date(message.createdAt)}</time></div>`;
 }
 function productRows(customer) {
   const status = customer.cardStatus === 'frozen' ? 'Frozen' : 'Active';
@@ -387,7 +393,8 @@ function setTransferProcessing(formElement, processing, seconds = 5) {
   formElement.querySelector('[data-submit-label]').textContent = processing ? 'Processing transfer' : 'Send transfer';
   formElement.querySelector('[data-submit-state]').textContent = processing ? `${seconds}s` : 'Continue';
   if (processing)
-    formElement.querySelector('[data-transfer-countdown]').textContent = `Processing securely · ${seconds} seconds remaining`;
+    formElement.querySelector('[data-transfer-countdown]').textContent =
+      `Processing securely · ${seconds} seconds remaining`;
 }
 
 function transferDelay(formElement, seconds) {
@@ -606,6 +613,53 @@ $('#done-receipt').onclick = () => $('#receipt-dialog').close();
 $('#download-receipt').onclick = downloadReceipt;
 $('#accept-refund').onclick = dismissRefundNotification;
 $('#refund-dialog').addEventListener('cancel', (event) => event.preventDefault());
+const bankChatForm = $('#message-form');
+const bankChatAttachment = $('#bank-chat-attachment');
+async function uploadBankChatAttachment(file) {
+  if (!file) return;
+  const image = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type);
+  const extension = file.name.toLowerCase().split('.').pop();
+  if (!image && !['pdf', 'txt', 'csv', 'docx', 'xlsx'].includes(extension))
+    return fail('Use PDF, TXT, CSV, DOCX, XLSX, JPG, PNG, WEBP, or GIF.');
+  if (image && file.size > 5 * 1024 * 1024) return fail('Images must be 5 MB or smaller.');
+  if (!image && file.size > 10 * 1024 * 1024) return fail('Files must be 10 MB or smaller.');
+  const buttons = [...bankChatForm.querySelectorAll('button')];
+  buttons.forEach((button) => (button.disabled = true));
+  try {
+    await api('/api/banking/uploads', {
+      method: 'POST',
+      headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) },
+      body: file
+    });
+    bankChatAttachment.value = '';
+    await load();
+    setChat(true);
+  } catch (error) {
+    fail(error.message);
+  } finally {
+    buttons.forEach((button) => (button.disabled = false));
+  }
+}
+$('.message-attach').onclick = () => bankChatAttachment.click();
+bankChatAttachment.onchange = () => uploadBankChatAttachment(bankChatAttachment.files[0]);
+bankChatForm.querySelector('textarea').addEventListener('paste', (event) => {
+  const image = [...event.clipboardData.files].find((file) => file.type.startsWith('image/'));
+  if (image) {
+    event.preventDefault();
+    uploadBankChatAttachment(image);
+  }
+});
+for (const eventName of ['dragenter', 'dragover'])
+  bankChatForm.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    bankChatForm.classList.add('dragging');
+  });
+for (const eventName of ['dragleave', 'drop'])
+  bankChatForm.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    bankChatForm.classList.remove('dragging');
+    if (eventName === 'drop') uploadBankChatAttachment(event.dataTransfer.files[0]);
+  });
 $('#message-form').onsubmit = async (event) => {
   event.preventDefault();
   const formElement = event.currentTarget;

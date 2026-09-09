@@ -1606,6 +1606,56 @@ svg {
   background: var(--blue);
   color: #fff;
 }
+.message.image {
+  width: 88%;
+  padding: 4px;
+  background: #fff;
+  color: var(--ink);
+}
+.message.file {
+  width: 88%;
+  padding: 5px;
+  background: #fff;
+  color: var(--ink);
+}
+.message-image,
+.message-image img {
+  display: block;
+  width: 100%;
+}
+.message-file {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px;
+  color: inherit;
+  text-decoration: none;
+}
+.message-file > span:first-child {
+  font-size: 24px;
+}
+.message-file > span:last-child {
+  min-width: 0;
+}
+.message-file strong,
+.message-file small {
+  display: block;
+}
+.message-file strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.message-file small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.message-image img {
+  max-height: 260px;
+  border-radius: 9px;
+  object-fit: contain;
+}
 .message time {
   display: block;
   margin-top: 4px;
@@ -1616,6 +1666,11 @@ svg {
   display: flex;
   gap: 7px;
   margin-top: 8px;
+}
+.message-form.dragging {
+  border-radius: 12px;
+  background: #fff1f0;
+  box-shadow: 0 0 0 2px var(--orange);
 }
 .message-form textarea {
   width: 100%;
@@ -1726,6 +1781,18 @@ svg {
   font-size: 24px;
   line-height: 1;
   cursor: pointer;
+}
+.message-form .message-attach {
+  flex: 0 0 44px;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--orange);
+  font-size: 19px;
+}
+.message-form button:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 .receipt-success-icon {
   width: 68px;

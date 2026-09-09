@@ -86,9 +86,7 @@ test('a transfer is returned after its delay and its notification can be dismiss
     headers: { cookie }
   });
   assert.equal(dismissed.status, 200);
-  const afterDismiss = await (
-    await fetch(base + '/api/banking/notifications', { headers: { cookie } })
-  ).json();
+  const afterDismiss = await (await fetch(base + '/api/banking/notifications', { headers: { cookie } })).json();
   assert.deepEqual(afterDismiss.notifications, []);
   const account = await (await fetch(base + '/api/banking/me', { headers: { cookie } })).json();
   assert.equal(account.transactions[0].type, 'reversal');
@@ -272,6 +270,142 @@ test('visitor and authenticated operator can exchange chat messages', async (t) 
   assert.deepEqual(
     messages.messages.map((item) => item.sender),
     ['visitor', 'operator']
+  );
+});
+
+test('visitor, banking customer, and operator can exchange validated R2 attachments', async (t) => {
+  const uploads = [];
+  const imageStorage = {
+    publicOrigin: 'https://media.example.com',
+    async uploadAttachment(attachment) {
+      uploads.push(attachment);
+      return {
+        key: `chat/${attachment.sessionId}/test${attachment.extension}`,
+        url: `https://media.example.com/chat/${attachment.sessionId}/test${attachment.extension}`
+      };
+    }
+  };
+  const server = createServer({ operatorKey: 'test-operator-secret', imageStorage });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const home = await fetch(base + '/');
+  assert.match(home.headers.get('content-security-policy'), /img-src 'self' data: https:\/\/media\.example\.com/);
+
+  const created = await (
+    await fetch(base + '/api/chat/sessions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}'
+    })
+  ).json();
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+  const sent = await fetch(`${base}/api/chat/sessions/${created.session.id}/uploads`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'image/png',
+      'x-chat-token': created.token,
+      'x-file-name': encodeURIComponent('payment receipt.png')
+    },
+    body: png
+  });
+  assert.equal(sent.status, 201);
+  const sentMessage = (await sent.json()).message;
+  assert.equal(sentMessage.type, 'image');
+  assert.equal(sentMessage.body, 'payment receipt.png');
+  assert.match(sentMessage.imageUrl, /^https:\/\/media\.example\.com\/chat\//);
+  assert.equal(uploads[0].contentType, 'image/png');
+  assert.equal(uploads[0].extension, '.png');
+
+  const invalid = await fetch(`${base}/api/chat/sessions/${created.session.id}/uploads`, {
+    method: 'POST',
+    headers: { 'content-type': 'image/png', 'x-chat-token': created.token },
+    body: Buffer.from('not a png')
+  });
+  assert.equal(invalid.status, 415);
+
+  const login = await fetch(base + '/api/operator/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ key: 'test-operator-secret' })
+  });
+  const operatorCookie = login.headers.get('set-cookie').split(';')[0];
+  const gif = Buffer.from('GIF89a', 'ascii');
+  const reply = await fetch(`${base}/api/operator/sessions/${created.session.id}/uploads`, {
+    method: 'POST',
+    headers: { cookie: operatorCookie, 'content-type': 'image/gif', 'x-file-name': 'answer.gif' },
+    body: gif
+  });
+  assert.equal(reply.status, 201);
+  const messages = await (
+    await fetch(`${base}/api/chat/sessions/${created.session.id}/messages`, {
+      headers: { 'x-chat-token': created.token }
+    })
+  ).json();
+  assert.deepEqual(
+    messages.messages.map(({ sender, type }) => [sender, type]),
+    [
+      ['visitor', 'image'],
+      ['operator', 'image']
+    ]
+  );
+
+  const pdf = Buffer.from('%PDF-1.7\nvalidated attachment\n%%EOF', 'utf8');
+  const documentResponse = await fetch(`${base}/api/chat/sessions/${created.session.id}/uploads`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/pdf',
+      'x-chat-token': created.token,
+      'x-file-name': encodeURIComponent('account document.pdf')
+    },
+    body: pdf
+  });
+  assert.equal(documentResponse.status, 201);
+  const documentMessage = (await documentResponse.json()).message;
+  assert.equal(documentMessage.type, 'file');
+  assert.equal(documentMessage.mimeType, 'application/pdf');
+  assert.equal(documentMessage.fileSize, pdf.length);
+  assert.match(documentMessage.fileUrl, /\.pdf$/);
+  assert.equal(documentMessage.imageUrl, null);
+
+  const executableResponse = await fetch(`${base}/api/chat/sessions/${created.session.id}/uploads`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/octet-stream',
+      'x-chat-token': created.token,
+      'x-file-name': 'malware.exe'
+    },
+    body: Buffer.from('MZ')
+  });
+  assert.equal(executableResponse.status, 415);
+
+  const customerLogin = await fetch(base + '/api/banking/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: 'customer.portal', password: 'Portal2026!' })
+  });
+  const customerCookie = customerLogin.headers.get('set-cookie').split(';')[0];
+  const customerData = await (await fetch(base + '/api/banking/me', { headers: { cookie: customerCookie } })).json();
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0x00]);
+  const customerImage = await fetch(base + '/api/banking/uploads', {
+    method: 'POST',
+    headers: { cookie: customerCookie, 'content-type': 'image/jpeg', 'x-file-name': 'statement.jpg' },
+    body: jpeg
+  });
+  assert.equal(customerImage.status, 201);
+  const operatorImage = await fetch(`${base}/api/operator/customers/${customerData.customer.id}/uploads`, {
+    method: 'POST',
+    headers: { cookie: operatorCookie, 'content-type': 'image/jpeg', 'x-file-name': 'reviewed.jpg' },
+    body: jpeg
+  });
+  assert.equal(operatorImage.status, 201);
+  const bankingMessages = await (await fetch(base + '/api/banking/me', { headers: { cookie: customerCookie } })).json();
+  assert.deepEqual(
+    bankingMessages.messages.map(({ sender, type }) => [sender, type]),
+    [
+      ['customer', 'image'],
+      ['operator', 'image']
+    ]
   );
 });
 

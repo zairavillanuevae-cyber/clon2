@@ -504,10 +504,42 @@ function showChatError(message = '') {
 }
 function renderChatMessage(message) {
   if (chatLog.querySelector(`[data-message-id="${message.id}"]`)) return;
-  const bubble = document.createElement('p');
-  bubble.className = `chat-bubble ${message.sender}`;
+  const bubble = document.createElement('div');
+  bubble.className = `chat-bubble ${message.sender}${['image', 'file'].includes(message.type) ? ` ${message.type}` : ''}`;
   bubble.dataset.messageId = message.id;
-  bubble.textContent = message.body;
+  if (message.type === 'image' && message.imageUrl) {
+    const link = document.createElement('a');
+    const image = document.createElement('img');
+    link.href = message.imageUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.setAttribute('aria-label', `Open image: ${message.body || 'chat image'}`);
+    image.src = message.imageUrl;
+    image.alt = message.body || 'Chat image';
+    image.loading = 'lazy';
+    image.referrerPolicy = 'no-referrer';
+    link.append(image);
+    bubble.append(link);
+  } else if (message.type === 'file' && message.fileUrl) {
+    const link = document.createElement('a');
+    const icon = document.createElement('span');
+    const copy = document.createElement('span');
+    const name = document.createElement('strong');
+    const meta = document.createElement('small');
+    link.className = 'chat-file';
+    link.href = message.fileUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.download = message.body || 'attachment';
+    icon.textContent = '📄';
+    name.textContent = message.body || 'Attachment';
+    meta.textContent = message.fileSize ? `${Math.ceil(Number(message.fileSize) / 1024)} KB` : 'Download file';
+    copy.append(name, meta);
+    link.append(icon, copy);
+    bubble.append(link);
+  } else {
+    bubble.textContent = message.body;
+  }
   chatLog.append(bubble);
   lastChatMessage = Math.max(lastChatMessage, Number(message.id));
   chatLog.scrollTop = chatLog.scrollHeight;
@@ -562,12 +594,69 @@ function closeChat() {
 }
 $('.chat-launch').addEventListener('click', () => (chatPanel.hidden ? openChat() : closeChat()));
 $('.chat-close').addEventListener('click', closeChat);
+const chatAttachmentInput = $('#chat-attachment');
+const chatForm = $('.chat-form');
+const allowedChatImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const allowedChatFileExtensions = new Set(['pdf', 'txt', 'csv', 'docx', 'xlsx']);
+async function uploadChatAttachment(file) {
+  if (!file) return;
+  const image = allowedChatImageTypes.has(file.type);
+  const extension = file.name.toLowerCase().split('.').pop();
+  if (!image && !allowedChatFileExtensions.has(extension))
+    return showChatError('Use PDF, TXT, CSV, DOCX, XLSX, JPG, PNG, WEBP, or GIF.');
+  if (image && file.size > 5 * 1024 * 1024) return showChatError('Images must be 5 MB or smaller.');
+  if (!image && file.size > 10 * 1024 * 1024) return showChatError('Files must be 10 MB or smaller.');
+  const buttons = [...chatForm.querySelectorAll('button')];
+  buttons.forEach((button) => (button.disabled = true));
+  showChatError();
+  try {
+    const session = await ensureChatSession();
+    const response = await fetch(`/api/chat/sessions/${session.id}/uploads`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': file.type,
+        'X-Chat-Token': session.token,
+        'X-File-Name': encodeURIComponent(file.name)
+      },
+      body: file
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'The file could not be sent.');
+    renderChatMessage(data.message);
+  } catch (error) {
+    showChatError(error.message);
+  } finally {
+    chatAttachmentInput.value = '';
+    buttons.forEach((button) => (button.disabled = false));
+    $('#chat-text').focus();
+  }
+}
+$('.chat-attach').addEventListener('click', () => chatAttachmentInput.click());
+chatAttachmentInput.addEventListener('change', () => uploadChatAttachment(chatAttachmentInput.files[0]));
+$('#chat-text').addEventListener('paste', (event) => {
+  const image = [...event.clipboardData.files].find((file) => file.type.startsWith('image/'));
+  if (image) {
+    event.preventDefault();
+    uploadChatAttachment(image);
+  }
+});
+for (const eventName of ['dragenter', 'dragover'])
+  chatForm.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    chatForm.classList.add('dragging');
+  });
+for (const eventName of ['dragleave', 'drop'])
+  chatForm.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    chatForm.classList.remove('dragging');
+    if (eventName === 'drop') uploadChatAttachment(event.dataTransfer.files[0]);
+  });
 $('.chat-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const input = $('#chat-text');
   const text = input.value.trim();
   if (!text) return;
-  const button = $('button', event.currentTarget);
+  const button = $('button[type="submit"]', event.currentTarget);
   button.disabled = true;
   showChatError();
   try {

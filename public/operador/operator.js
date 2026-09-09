@@ -94,7 +94,13 @@ function txRow(tx) {
   return `<article class="tx ${escape(tx.type)}"><span class="tx-mark">${debit ? '−' : '+'}</span><div><p>${escape(tx.description)}</p><small>${meta}</small></div><strong>${debit ? '−' : '+'}${money(tx.amount)}</strong></article>`;
 }
 function messageRow(message) {
-  return `<p class="message ${escape(message.sender)}">${escape(message.body)}<time>${date(message.createdAt)}</time></p>`;
+  const content =
+    message.type === 'image' && message.imageUrl
+      ? `<a class="message-image" href="${escape(message.imageUrl)}" target="_blank" rel="noopener noreferrer"><img src="${escape(message.imageUrl)}" alt="${escape(message.body || 'Chat image')}" loading="lazy" referrerpolicy="no-referrer"></a>`
+      : message.type === 'file' && message.fileUrl
+        ? `<a class="message-file" href="${escape(message.fileUrl)}" target="_blank" rel="noopener noreferrer" download="${escape(message.body || 'attachment')}"><span aria-hidden="true">📄</span><span><strong>${escape(message.body || 'Attachment')}</strong><small>${message.fileSize ? `${Math.ceil(Number(message.fileSize) / 1024)} KB` : 'Download file'}</small></span></a>`
+        : escape(message.body);
+  return `<div class="message ${escape(message.sender)}${['image', 'file'].includes(message.type) ? ` ${message.type}` : ''}">${content}<time>${date(message.createdAt)}</time></div>`;
 }
 function maskCard(value) {
   return `•••• •••• •••• ${String(value || '')
@@ -237,7 +243,8 @@ async function loadConversations(openSelected = true) {
           kind: 'banking',
           name: customer.name,
           meta: `${customer.username} · Banking customer`,
-          lastMessage: last?.body || 'No messages yet',
+          lastMessage:
+            last?.type === 'image' ? '📷 Image' : last?.type === 'file' ? '📎 File' : last?.body || 'No messages yet',
           updatedAt: last?.createdAt || customer.createdAt
         };
       })
@@ -311,7 +318,7 @@ async function openConversation(kind, id) {
       .toUpperCase();
     $('#conversation-detail').innerHTML = `<header class="conversation-head"><div class="conversation-avatar">${escape(
       initials
-    )}</div><div><h2>${escape(name)}</h2><p>${escape(subtitle)}</p></div><span class="conversation-source ${escape(kind)}">${banking ? 'Banking' : 'Website'}</span></header><div class="message-thread" id="operator-message-thread">${data.messages.map(messageRow).join('') || '<div class="thread-empty"><strong>No messages yet</strong><span>Start the conversation here.</span></div>'}</div><form class="reply-form" id="reply-form"><textarea name="text" maxlength="2000" rows="2" placeholder="Write a reply…" aria-label="Reply to conversation" required></textarea><button type="submit">Send reply <span aria-hidden="true">↗</span></button></form>`;
+    )}</div><div><h2>${escape(name)}</h2><p>${escape(subtitle)}</p></div><span class="conversation-source ${escape(kind)}">${banking ? 'Banking' : 'Website'}</span></header><div class="message-thread" id="operator-message-thread">${data.messages.map(messageRow).join('') || '<div class="thread-empty"><strong>No messages yet</strong><span>Start the conversation here.</span></div>'}</div><form class="reply-form with-attachment" id="reply-form"><input id="operator-attachment" type="file" accept="image/jpeg,image/png,image/webp,image/gif,.pdf,.txt,.csv,.docx,.xlsx" hidden><button class="reply-attach" type="button" aria-label="Attach file" title="Attach file">📎</button><textarea name="text" maxlength="2000" rows="2" placeholder="Write a reply…" aria-label="Reply to conversation" required></textarea><button type="submit">Send reply <span aria-hidden="true">↗</span></button></form>`;
     const thread = $('#operator-message-thread');
     thread.scrollTop = thread.scrollHeight;
     $('#reply-form').onsubmit = async (event) => {
@@ -330,6 +337,42 @@ async function openConversation(kind, id) {
         await loadConversations(false);
       } catch (e) {
         fail(e.message);
+      }
+    };
+    const attachmentInput = $('#operator-attachment');
+    $('.reply-attach').onclick = () => attachmentInput.click();
+    attachmentInput.onchange = async () => {
+      const file = attachmentInput.files[0];
+      if (!file) return;
+      const image = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type);
+      const extension = file.name.toLowerCase().split('.').pop();
+      if (!image && !['pdf', 'txt', 'csv', 'docx', 'xlsx'].includes(extension)) {
+        fail('Use PDF, TXT, CSV, DOCX, XLSX, JPG, PNG, WEBP, or GIF.');
+        attachmentInput.value = '';
+        return;
+      }
+      if ((image && file.size > 5 * 1024 * 1024) || (!image && file.size > 10 * 1024 * 1024)) {
+        fail(image ? 'Images must be 5 MB or smaller.' : 'Files must be 10 MB or smaller.');
+        attachmentInput.value = '';
+        return;
+      }
+      const buttons = [...$('#reply-form').querySelectorAll('button')];
+      buttons.forEach((button) => (button.disabled = true));
+      try {
+        const endpoint = banking ? `/api/operator/customers/${id}/uploads` : `/api/operator/sessions/${id}/uploads`;
+        await api(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) },
+          body: file
+        });
+        fail();
+        await openConversation(kind, id);
+        await loadConversations(false);
+      } catch (e) {
+        fail(e.message);
+      } finally {
+        attachmentInput.value = '';
+        buttons.forEach((button) => (button.disabled = false));
       }
     };
   } catch (e) {
