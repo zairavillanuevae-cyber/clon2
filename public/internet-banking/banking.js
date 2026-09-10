@@ -28,10 +28,13 @@ const blockedOperations = {
   }
 };
 
-const money = (value) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: activeCurrency, minimumFractionDigits: 2 }).format(
-    value
-  );
+const money = (value, currency = activeCurrency) =>
+  new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    currencyDisplay: 'narrowSymbol',
+    minimumFractionDigits: 2
+  }).format(value);
 const date = (value) =>
   new Intl.DateTimeFormat('en-US', {
     day: '2-digit',
@@ -117,7 +120,7 @@ function txRow(transaction) {
   return `<article class="tx ${escape(transaction.type)}">
     <span class="tx-icon" aria-hidden="true">${debit ? '−' : '+'}</span>
     <div><p>${escape(transaction.description)}</p><small>${meta}</small></div>
-    <strong>${debit ? '−' : '+'}${money(transaction.amount)}</strong>
+    <strong>${debit ? '−' : '+'}${money(transaction.amount, transaction.currency || activeCurrency)}</strong>
   </article>`;
 }
 function messageRow(message) {
@@ -131,13 +134,20 @@ function messageRow(message) {
 }
 function productRows(customer) {
   const status = customer.cardStatus === 'frozen' ? 'Frozen' : 'Active';
+  const accounts = customer.accounts || [customer];
   return `<div class="product-list">
-    <button class="product-row" type="button" data-go="activity">
+    ${accounts
+      .map(
+        (
+          account
+        ) => `<button class="product-row ${account.currency === 'TRY' ? 'try-product' : ''}" type="button" data-go="activity">
       <span class="product-symbol account-symbol"><img src="/internet-banking/nova-edu-mark.png" alt="" /></span>
-      <span class="product-copy"><strong>${escape(customer.currency)} ACCOUNT</strong><small>${escape(maskAccount(customer.accountNumber))}</small></span>
-      <span class="product-value"><strong id="balance-value" data-value="${escape(money(customer.balance))}">••••••</strong><small>Available balance</small></span>
+      <span class="product-copy"><strong>${escape(account.currency)} ACCOUNT</strong><small>${escape(maskAccount(account.accountNumber))}${account.isPrimary ? ' · Primary' : ''}</small></span>
+      <span class="product-value"><strong class="balance-value" data-value="${escape(money(account.balance, account.currency))}">${state.balanceVisible ? escape(money(account.balance, account.currency)) : '••••••'}</strong><small>Available balance</small></span>
       <span class="row-arrow">${icons.arrow}</span>
-    </button>
+    </button>`
+      )
+      .join('')}
     <button class="product-row" type="button" data-go="card">
       <span class="product-symbol card-symbol">V</span>
       <span class="product-copy"><strong>Debit card</strong><small>${escape(maskCard(customer.cardNumber))}</small></span>
@@ -513,8 +523,9 @@ function wireDashboard() {
   });
   $('#toggle-balance').onclick = () => {
     state.balanceVisible = !state.balanceVisible;
-    const value = $('#balance-value');
-    value.textContent = state.balanceVisible ? value.dataset.value : '••••••';
+    $$('.balance-value').forEach(
+      (value) => (value.textContent = state.balanceVisible ? value.dataset.value : '••••••')
+    );
     $('#toggle-balance').classList.toggle('is-visible', state.balanceVisible);
     $('#toggle-balance').setAttribute('aria-label', state.balanceVisible ? 'Hide balances' : 'Show balances');
   };

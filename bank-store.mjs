@@ -11,7 +11,15 @@ const cardNumber = () =>
 const cardExpiry = () =>
   `${String(new Date().getMonth() + 1).padStart(2, '0')}/${String((new Date().getFullYear() + 4) % 100).padStart(2, '0')}`;
 const cardCvv = () => crypto.randomInt(0, 1000).toString().padStart(3, '0');
-const publicCustomer = (row) => ({
+const publicAccount = (row, isPrimary = false) => ({
+  id: row.id,
+  accountNumber: row.account_number,
+  currency: row.currency,
+  balance: Number(row.balance_cents) / 100,
+  isPrimary,
+  createdAt: row.created_at
+});
+const publicCustomer = (row, extraAccounts = row.secondary_accounts || []) => ({
   id: row.id,
   username: row.username,
   name: row.name,
@@ -22,7 +30,8 @@ const publicCustomer = (row) => ({
   cardStatus: row.card_status || 'active',
   currency: row.currency,
   balance: Number(row.balance_cents) / 100,
-  createdAt: row.created_at
+  createdAt: row.created_at,
+  accounts: [publicAccount(row, true), ...extraAccounts.map((account) => publicAccount(account, false))]
 });
 
 export function passwordHash(password, salt) {
@@ -49,7 +58,8 @@ export function createMemoryBankStore({
     password_salt: salt,
     password_hash: passwordHash(password, salt),
     active: true,
-    created_at: nowIso()
+    created_at: nowIso(),
+    secondary_accounts: []
   };
   const customers = new Map([[customer.id, customer]]);
   const transactions = [
@@ -77,7 +87,7 @@ export function createMemoryBankStore({
       return row?.active ? publicCustomer(row) : null;
     },
     async listCustomers() {
-      return [...customers.values()].filter((item) => item.active).map(publicCustomer);
+      return [...customers.values()].filter((item) => item.active).map((item) => publicCustomer(item));
     },
     async createCustomer({
       name,
@@ -108,7 +118,8 @@ export function createMemoryBankStore({
         password_salt: customerSalt,
         password_hash: passwordHash(newPassword, customerSalt),
         active: true,
-        created_at: createdAt
+        created_at: createdAt,
+        secondary_accounts: []
       };
       customers.set(row.id, row);
       if (balanceCents > 0)
@@ -122,6 +133,45 @@ export function createMemoryBankStore({
           createdAt
         });
       return { customer: publicCustomer(row) };
+    },
+    async createAccount({ customerId, currency, openingBalance, accountNumber: requestedAccountNumber }) {
+      const row = customers.get(customerId);
+      if (!row?.active) return { error: 'not_found' };
+      if ([row, ...row.secondary_accounts].some((account) => account.currency === currency))
+        return { error: 'currency_exists' };
+      const number = requestedAccountNumber || accountNumber();
+      if (
+        [...customers.values()].some((item) =>
+          [item, ...item.secondary_accounts].some((account) => account.account_number === number)
+        )
+      )
+        return { error: 'account_number_exists' };
+      const createdAt = nowIso();
+      const balanceCents = money(openingBalance);
+      const account = {
+        id: crypto.randomUUID(),
+        customer_id: customerId,
+        account_number: number,
+        currency,
+        balance_cents: balanceCents,
+        created_at: createdAt
+      };
+      row.secondary_accounts.push(account);
+      if (balanceCents > 0)
+        transactions.push({
+          id: ++transactionId,
+          customerId,
+          accountId: account.id,
+          currency,
+          accountNumber: number,
+          type: 'opening',
+          amount: balanceCents / 100,
+          description: 'Opening balance',
+          actor: 'operator',
+          createdAt,
+          showDate: true
+        });
+      return { customer: publicCustomer(row), account: publicAccount(account) };
     },
     async deleteCustomer(id) {
       const row = customers.get(id);
@@ -144,13 +194,24 @@ export function createMemoryBankStore({
       return { customer: publicCustomer(row) };
     },
     async getTransactions(id, limit = 100) {
+      const customer = customers.get(id);
       return transactions
         .filter((item) => item.customerId === id)
         .slice(-limit)
-        .reverse();
+        .reverse()
+        .map((item) => {
+          const account = customer?.secondary_accounts.find((candidate) => candidate.id === item.accountId);
+          return {
+            ...item,
+            accountId: item.accountId || id,
+            currency: item.currency || account?.currency || customer?.currency || 'USD',
+            accountNumber: item.accountNumber || account?.account_number || customer?.account_number
+          };
+        });
     },
     async transact({
       customerId,
+      accountId = customerId,
       type,
       amount,
       description,
@@ -161,14 +222,22 @@ export function createMemoryBankStore({
     }) {
       const activeCustomer = customers.get(customerId);
       if (!activeCustomer) return { error: 'not_found' };
+      const activeAccount =
+        accountId === customerId
+          ? activeCustomer
+          : activeCustomer.secondary_accounts.find((account) => account.id === accountId);
+      if (!activeAccount) return { error: 'account_not_found' };
       const cents = money(amount);
       if (!Number.isSafeInteger(cents) || cents <= 0) return { error: 'invalid_amount' };
       const debit = type === 'withdrawal' || type === 'debit' || type === 'payment';
-      if (debit && activeCustomer.balance_cents < cents) return { error: 'insufficient_funds' };
-      activeCustomer.balance_cents += debit ? -cents : cents;
+      if (debit && activeAccount.balance_cents < cents) return { error: 'insufficient_funds' };
+      activeAccount.balance_cents += debit ? -cents : cents;
       const row = {
         id: ++transactionId,
         customerId,
+        accountId,
+        currency: activeAccount.currency,
+        accountNumber: activeAccount.account_number,
         type,
         amount: cents / 100,
         description,
@@ -181,7 +250,11 @@ export function createMemoryBankStore({
         notificationDismissed: false
       };
       transactions.push(row);
-      return { customer: publicCustomer(activeCustomer), transaction: row };
+      return {
+        customer: publicCustomer(activeCustomer),
+        account: publicAccount(activeAccount, accountId === customerId),
+        transaction: row
+      };
     },
     async processDueReversals(customerId, currentTime = Date.now()) {
       const activeCustomer = customers.get(customerId);
@@ -307,6 +380,12 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
       file_url TEXT, mime_type VARCHAR(160), file_size BIGINT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS bank_customer_accounts (
+      id UUID PRIMARY KEY, customer_id UUID NOT NULL REFERENCES bank_customers(id) ON DELETE CASCADE,
+      account_number VARCHAR(40) UNIQUE NOT NULL, currency VARCHAR(3) NOT NULL,
+      balance_cents BIGINT NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(customer_id, currency)
+    );
     CREATE INDEX IF NOT EXISTS bank_transactions_customer_idx ON bank_transactions(customer_id, id DESC);
     CREATE INDEX IF NOT EXISTS bank_messages_customer_idx ON bank_messages(customer_id, id);
   `);
@@ -321,6 +400,8 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
   await pool.query('ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS reversal_due_at TIMESTAMPTZ');
   await pool.query('ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS reversed_at TIMESTAMPTZ');
   await pool.query('ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS related_transaction_id BIGINT');
+  await pool.query('ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS account_id UUID');
+  await pool.query('UPDATE bank_transactions SET account_id=customer_id WHERE account_id IS NULL');
   await pool.query(
     'ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS notification_dismissed BOOLEAN NOT NULL DEFAULT FALSE'
   );
@@ -342,7 +423,7 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
   );
   if (inserted.rowCount)
     await pool.query(
-      "INSERT INTO bank_transactions (customer_id,type,amount_cents,description,actor) VALUES ($1,'opening',$2,'Opening balance','system')",
+      "INSERT INTO bank_transactions (customer_id,account_id,type,amount_cents,description,actor) VALUES ($1,$1,'opening',$2,'Opening balance','system')",
       [id, money(seed.openingBalance)]
     );
   await pool.query(
@@ -357,6 +438,15 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
       'UPDATE bank_customers SET card_number=COALESCE(card_number,$2), card_expiry=COALESCE(card_expiry,$3), card_cvv=COALESCE(card_cvv,$4) WHERE id=$1',
       [row.id, cardNumber(), cardExpiry(), cardCvv()]
     );
+  const getAccounts = async (customerId, client = pool) => {
+    const { rows } = await client.query(
+      'SELECT * FROM bank_customer_accounts WHERE customer_id=$1 ORDER BY created_at,id',
+      [customerId]
+    );
+    return rows;
+  };
+  const hydratedCustomer = async (row, client = pool) =>
+    row ? publicCustomer(row, await getAccounts(row.id, client)) : null;
   return {
     async close() {
       await pool.end();
@@ -364,15 +454,15 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
     async authenticate(username, password) {
       const { rows } = await pool.query('SELECT * FROM bank_customers WHERE username=$1 AND active=TRUE', [username]);
       const row = rows[0];
-      return row && passwordHash(password, row.password_salt) === row.password_hash ? publicCustomer(row) : null;
+      return row && passwordHash(password, row.password_salt) === row.password_hash ? hydratedCustomer(row) : null;
     },
     async getCustomer(id) {
       const { rows } = await pool.query('SELECT * FROM bank_customers WHERE id=$1 AND active=TRUE', [id]);
-      return rows[0] ? publicCustomer(rows[0]) : null;
+      return hydratedCustomer(rows[0]);
     },
     async listCustomers() {
       const { rows } = await pool.query('SELECT * FROM bank_customers WHERE active=TRUE ORDER BY created_at');
-      return rows.map(publicCustomer);
+      return Promise.all(rows.map((row) => hydratedCustomer(row)));
     },
     async createCustomer({
       name,
@@ -409,14 +499,66 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
         );
         if (balanceCents > 0)
           await client.query(
-            "INSERT INTO bank_transactions (customer_id,type,amount_cents,description,actor) VALUES ($1,'opening',$2,'Opening balance','operator')",
+            "INSERT INTO bank_transactions (customer_id,account_id,type,amount_cents,description,actor) VALUES ($1,$1,'opening',$2,'Opening balance','operator')",
             [id, balanceCents]
           );
+        const customer = await hydratedCustomer(rows[0], client);
         await client.query('COMMIT');
-        return { customer: publicCustomer(rows[0]) };
+        return { customer };
       } catch (error) {
         await client.query('ROLLBACK');
         if (error.code === '23505') return { error: 'username_exists' };
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+    async createAccount({ customerId, currency, openingBalance, accountNumber: requestedAccountNumber }) {
+      const client = await pool.connect();
+      const id = crypto.randomUUID();
+      const number = requestedAccountNumber || accountNumber();
+      const balanceCents = money(openingBalance);
+      try {
+        await client.query('BEGIN');
+        const customerResult = await client.query(
+          'SELECT * FROM bank_customers WHERE id=$1 AND active=TRUE FOR UPDATE',
+          [customerId]
+        );
+        if (!customerResult.rowCount) {
+          await client.query('ROLLBACK');
+          return { error: 'not_found' };
+        }
+        const duplicateCurrency = await client.query(
+          'SELECT 1 FROM bank_customer_accounts WHERE customer_id=$1 AND currency=$2',
+          [customerId, currency]
+        );
+        if (customerResult.rows[0].currency === currency || duplicateCurrency.rowCount) {
+          await client.query('ROLLBACK');
+          return { error: 'currency_exists' };
+        }
+        const duplicateNumber = await client.query(
+          'SELECT 1 FROM bank_customers WHERE account_number=$1 UNION ALL SELECT 1 FROM bank_customer_accounts WHERE account_number=$1 LIMIT 1',
+          [number]
+        );
+        if (duplicateNumber.rowCount) {
+          await client.query('ROLLBACK');
+          return { error: 'account_number_exists' };
+        }
+        const accountResult = await client.query(
+          'INSERT INTO bank_customer_accounts (id,customer_id,account_number,currency,balance_cents) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+          [id, customerId, number, currency, balanceCents]
+        );
+        if (balanceCents > 0)
+          await client.query(
+            "INSERT INTO bank_transactions (customer_id,account_id,type,amount_cents,description,actor) VALUES ($1,$2,'opening',$3,'Opening balance','operator')",
+            [customerId, id, balanceCents]
+          );
+        const customer = await hydratedCustomer(customerResult.rows[0], client);
+        await client.query('COMMIT');
+        return { customer, account: publicAccount(accountResult.rows[0]) };
+      } catch (error) {
+        await client.query('ROLLBACK');
+        if (error.code === '23505') return { error: 'account_exists' };
         throw error;
       } finally {
         client.release();
@@ -431,7 +573,7 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
         'UPDATE bank_customers SET card_status=$2 WHERE id=$1 AND active=TRUE RETURNING *',
         [id, status]
       );
-      return rows[0] ? publicCustomer(rows[0]) : null;
+      return hydratedCustomer(rows[0]);
     },
     async setCardNumber(id, newCardNumber) {
       try {
@@ -439,7 +581,7 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
           'UPDATE bank_customers SET card_number=$2 WHERE id=$1 AND active=TRUE RETURNING *',
           [id, newCardNumber]
         );
-        return rows[0] ? { customer: publicCustomer(rows[0]) } : { error: 'not_found' };
+        return rows[0] ? { customer: await hydratedCustomer(rows[0]) } : { error: 'not_found' };
       } catch (error) {
         if (error.code === '23505') return { error: 'card_number_exists' };
         throw error;
@@ -447,13 +589,20 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
     },
     async getTransactions(customerId, limit = 100) {
       const { rows } = await pool.query(
-        'SELECT id,customer_id AS "customerId",type,amount_cents::float/100 AS amount,description,actor,show_date AS "showDate",created_at AS "createdAt" FROM bank_transactions WHERE customer_id=$1 ORDER BY id DESC LIMIT $2',
+        `SELECT t.id,t.customer_id AS "customerId",COALESCE(t.account_id,t.customer_id) AS "accountId",
+          t.type,t.amount_cents::float/100 AS amount,t.description,t.actor,t.show_date AS "showDate",
+          t.created_at AS "createdAt",COALESCE(a.currency,c.currency) AS currency,
+          COALESCE(a.account_number,c.account_number) AS "accountNumber"
+        FROM bank_transactions t JOIN bank_customers c ON c.id=t.customer_id
+        LEFT JOIN bank_customer_accounts a ON a.id=t.account_id
+        WHERE t.customer_id=$1 ORDER BY t.id DESC LIMIT $2`,
         [customerId, limit]
       );
       return rows;
     },
     async transact({
       customerId,
+      accountId = customerId,
       type,
       amount,
       description,
@@ -468,25 +617,54 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        const current = await client.query('SELECT * FROM bank_customers WHERE id=$1 FOR UPDATE', [customerId]);
+        const current = await client.query('SELECT * FROM bank_customers WHERE id=$1 AND active=TRUE FOR UPDATE', [
+          customerId
+        ]);
         if (!current.rowCount) {
           await client.query('ROLLBACK');
           return { error: 'not_found' };
         }
-        if (debit && Number(current.rows[0].balance_cents) < cents) {
+        const secondary = accountId !== customerId;
+        const currentAccount = secondary
+          ? await client.query('SELECT * FROM bank_customer_accounts WHERE id=$1 AND customer_id=$2 FOR UPDATE', [
+              accountId,
+              customerId
+            ])
+          : current;
+        if (!currentAccount.rowCount) {
+          await client.query('ROLLBACK');
+          return { error: 'account_not_found' };
+        }
+        if (debit && Number(currentAccount.rows[0].balance_cents) < cents) {
           await client.query('ROLLBACK');
           return { error: 'insufficient_funds' };
         }
-        const updated = await client.query(
-          'UPDATE bank_customers SET balance_cents=balance_cents+$2 WHERE id=$1 RETURNING *',
-          [customerId, debit ? -cents : cents]
-        );
+        const updated = secondary
+          ? await client.query(
+              'UPDATE bank_customer_accounts SET balance_cents=balance_cents+$2 WHERE id=$1 RETURNING *',
+              [accountId, debit ? -cents : cents]
+            )
+          : await client.query('UPDATE bank_customers SET balance_cents=balance_cents+$2 WHERE id=$1 RETURNING *', [
+              customerId,
+              debit ? -cents : cents
+            ]);
         const tx = await client.query(
-          'INSERT INTO bank_transactions (customer_id,type,amount_cents,description,actor,show_date,created_at,reversal_due_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,customer_id AS "customerId",type,amount_cents::float/100 AS amount,description,actor,show_date AS "showDate",created_at AS "createdAt",reversal_due_at AS "reversalDueAt"',
-          [customerId, type, cents, description, actor, showDate, createdAt, reversalDueAt]
+          'INSERT INTO bank_transactions (customer_id,account_id,type,amount_cents,description,actor,show_date,created_at,reversal_due_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,customer_id AS "customerId",account_id AS "accountId",type,amount_cents::float/100 AS amount,description,actor,show_date AS "showDate",created_at AS "createdAt",reversal_due_at AS "reversalDueAt"',
+          [customerId, accountId, type, cents, description, actor, showDate, createdAt, reversalDueAt]
         );
+        const extraAccounts = await getAccounts(customerId, client);
+        const customer = publicCustomer(secondary ? current.rows[0] : updated.rows[0], extraAccounts);
+        const account = publicAccount(updated.rows[0], !secondary);
         await client.query('COMMIT');
-        return { customer: publicCustomer(updated.rows[0]), transaction: tx.rows[0] };
+        return {
+          customer,
+          account,
+          transaction: {
+            ...tx.rows[0],
+            currency: updated.rows[0].currency,
+            accountNumber: updated.rows[0].account_number
+          }
+        };
       } catch (error) {
         await client.query('ROLLBACK');
         throw error;
@@ -500,7 +678,7 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
       try {
         await client.query('BEGIN');
         const pending = await client.query(
-          "SELECT id,amount_cents,description FROM bank_transactions WHERE customer_id=$1 AND type='withdrawal' AND reversal_due_at<=NOW() AND reversed_at IS NULL FOR UPDATE",
+          "SELECT id,account_id,amount_cents,description FROM bank_transactions WHERE customer_id=$1 AND type='withdrawal' AND reversal_due_at<=NOW() AND reversed_at IS NULL FOR UPDATE",
           [customerId]
         );
         for (const transaction of pending.rows) {
@@ -510,7 +688,7 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
             transaction.amount_cents
           ]);
           const reversal = await client.query(
-            "INSERT INTO bank_transactions (customer_id,type,amount_cents,description,actor,related_transaction_id,created_at) VALUES ($1,'reversal',$2,$3,'system',$4,$5) RETURNING id,customer_id AS \"customerId\",type,amount_cents::float/100 AS amount,description,actor,related_transaction_id AS \"relatedTransactionId\",created_at AS \"createdAt\"",
+            'INSERT INTO bank_transactions (customer_id,account_id,type,amount_cents,description,actor,related_transaction_id,created_at) VALUES ($1,$1,\'reversal\',$2,$3,\'system\',$4,$5) RETURNING id,customer_id AS "customerId",account_id AS "accountId",type,amount_cents::float/100 AS amount,description,actor,related_transaction_id AS "relatedTransactionId",created_at AS "createdAt"',
             [
               customerId,
               transaction.amount_cents,
@@ -533,7 +711,7 @@ export async function createBankStore(databaseUrl = process.env.DATABASE_URL) {
     },
     async getNotifications(customerId) {
       const { rows } = await pool.query(
-        "SELECT id,'transfer_reversed' AS type,amount_cents::float/100 AS amount,related_transaction_id AS \"relatedTransactionId\",created_at AS \"createdAt\" FROM bank_transactions WHERE customer_id=$1 AND type='reversal' AND notification_dismissed=FALSE ORDER BY id",
+        'SELECT id,\'transfer_reversed\' AS type,amount_cents::float/100 AS amount,related_transaction_id AS "relatedTransactionId",created_at AS "createdAt" FROM bank_transactions WHERE customer_id=$1 AND type=\'reversal\' AND notification_dismissed=FALSE ORDER BY id',
         [customerId]
       );
       return rows;

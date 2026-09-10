@@ -568,6 +568,12 @@ svg {
   max-width: none;
   transform: scale(1.35);
 }
+.try-product .product-symbol {
+  background: #f8eedc;
+}
+.try-product .product-value strong {
+  color: #9a6410;
+}
 .card-symbol {
   background: var(--blue-light);
   color: var(--blue);

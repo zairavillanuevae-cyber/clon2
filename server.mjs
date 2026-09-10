@@ -235,7 +235,7 @@ export function createServer(options = {}) {
           return sendJson(res, 201, result);
         }
         const customerMatch = pathname.match(
-          /^\/api\/operator\/customers\/([0-9a-f-]+)(?:\/(transactions|messages|uploads|card-status|card-number))?$/i
+          /^\/api\/operator\/customers\/([0-9a-f-]+)(?:\/(accounts|transactions|messages|uploads|card-status|card-number))?$/i
         );
         if (customerMatch) {
           const customer = await bankStore.getCustomer(customerMatch[1]);
@@ -250,6 +250,30 @@ export function createServer(options = {}) {
               transactions: await bankStore.getTransactions(customer.id),
               messages: await bankStore.getMessages(customer.id)
             });
+          if (req.method === 'POST' && customerMatch[2] === 'accounts') {
+            const body = await readJson(req);
+            const currency = cleanText(body.currency, 3).toUpperCase();
+            const openingBalance = Number(body.openingBalance ?? 0);
+            const requestedAccountNumber = cleanText(body.accountNumber, 40).toUpperCase();
+            if (!['USD', 'EUR', 'TRY'].includes(currency))
+              return sendJson(res, 400, { error: 'Unsupported currency.' });
+            if (!Number.isFinite(openingBalance) || openingBalance < 0 || openingBalance > 1_000_000_000)
+              return sendJson(res, 400, { error: 'Enter a valid opening balance.' });
+            if (requestedAccountNumber && !/^[A-Z0-9 -]{8,40}$/.test(requestedAccountNumber))
+              return sendJson(res, 400, { error: 'Enter a valid account number or IBAN.' });
+            const result = await bankStore.createAccount({
+              customerId: customer.id,
+              currency,
+              openingBalance,
+              accountNumber: requestedAccountNumber
+            });
+            if (result.error === 'currency_exists')
+              return sendJson(res, 409, { error: `This customer already has a ${currency} account.` });
+            if (['account_number_exists', 'account_exists'].includes(result.error))
+              return sendJson(res, 409, { error: 'That account number is already in use.' });
+            if (result.error) return sendJson(res, 400, { error: 'The account could not be created.' });
+            return sendJson(res, 201, result);
+          }
           if (req.method === 'POST' && customerMatch[2] === 'transactions') {
             const body = await readJson(req);
             const type = body.type === 'debit' ? 'debit' : 'credit';
@@ -262,6 +286,7 @@ export function createServer(options = {}) {
               return sendJson(res, 400, { error: 'Enter a valid date and time.' });
             const result = await bankStore.transact({
               customerId: customer.id,
+              accountId: cleanText(body.accountId, 36) || customer.id,
               type,
               amount: body.amount,
               description:

@@ -9,7 +9,7 @@ const state = {
 };
 let conversationTimer = null;
 const money = (n, currency = state.currency) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(n);
+  new Intl.NumberFormat('en-US', { style: 'currency', currency, currencyDisplay: 'narrowSymbol' }).format(n);
 const date = (v) =>
   new Intl.DateTimeFormat('en-US', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(
     new Date(v)
@@ -90,8 +90,10 @@ async function loadCustomers() {
 function txRow(tx) {
   const debit = ['withdrawal', 'debit'].includes(tx.type);
   const actor = tx.actor === 'operator' ? 'Operator' : tx.actor === 'customer' ? 'Customer' : 'System';
-  const meta = tx.showDate === false ? actor : `${date(tx.createdAt)} · ${actor}`;
-  return `<article class="tx ${escape(tx.type)}"><span class="tx-mark">${debit ? '−' : '+'}</span><div><p>${escape(tx.description)}</p><small>${meta}</small></div><strong>${debit ? '−' : '+'}${money(tx.amount)}</strong></article>`;
+  const accountMeta = `${tx.currency || state.currency} · ${String(tx.accountNumber || '').slice(-4)}`;
+  const meta =
+    tx.showDate === false ? `${actor} · ${accountMeta}` : `${date(tx.createdAt)} · ${actor} · ${accountMeta}`;
+  return `<article class="tx ${escape(tx.type)}"><span class="tx-mark">${debit ? '−' : '+'}</span><div><p>${escape(tx.description)}</p><small>${escape(meta)}</small></div><strong>${debit ? '−' : '+'}${money(tx.amount, tx.currency || state.currency)}</strong></article>`;
 }
 function messageRow(message) {
   const content =
@@ -119,9 +121,11 @@ async function selectCustomer(id) {
   try {
     const data = await api(`/api/operator/customers/${id}`);
     state.currency = data.customer.currency;
+    const accounts = data.customer.accounts || [data.customer];
+    const hasTryAccount = accounts.some((account) => account.currency === 'TRY');
     const withdrawals = data.transactions.filter((x) => x.type === 'withdrawal');
     $('#detail').innerHTML =
-      `<div class="customer-head"><div><h2>${escape(data.customer.name)}</h2><p>${escape(data.customer.username)} · ${escape(data.customer.accountNumber)}</p></div><div class="account-chip"><span>${money(data.customer.balance)}</span><small>Available balance</small></div></div><div class="metrics"><div class="metric"><small>Current balance</small><strong>${money(data.customer.balance)}</strong></div><div class="metric"><small>Transactions</small><strong>${data.transactions.length}</strong></div><div class="metric"><small>Withdrawals</small><strong>${withdrawals.length}</strong></div></div><section class="banking-identifiers"><div><small>Demo account / IBAN</small><strong>${escape(data.customer.accountNumber)}</strong></div><div class="card-number-field"><div class="card-number-display"><small>Demo card</small><strong>${escape(maskCard(data.customer.cardNumber))}</strong><button id="edit-card-number" type="button">Edit number</button></div><form id="card-number-form" hidden><label for="card-number-input">Card number</label><input id="card-number-input" name="cardNumber" value="${escape(data.customer.cardNumber)}" inputmode="numeric" autocomplete="off" maxlength="19" pattern="[0-9]{4}( [0-9]{4}){3}" required><div><button class="save-card-number" type="submit">Save</button><button id="cancel-card-number" type="button">Cancel</button></div></form></div><div><small>Demo validity · code</small><strong>${escape(data.customer.cardExpiry)} · ${escape(data.customer.cardCvv)}</strong></div><button id="operator-card-status" type="button">${data.customer.cardStatus === 'frozen' ? 'Unfreeze card' : 'Freeze card'}</button></section><div class="detail-grid account-detail-grid"><section class="block"><h3>Recent activity</h3><div class="transaction-list">${data.transactions.map(txRow).join('') || '<p>No transactions yet.</p>'}</div></section><aside class="block actions"><h3>Adjust balance</h3><form id="balance-form"><div class="segmented"><label><input type="radio" name="type" value="credit" checked>Credit</label><label><input type="radio" name="type" value="debit">Debit</label></div><input name="amount" type="number" min="0.01" step="0.01" placeholder="Amount in ${escape(data.customer.currency)}" required><textarea name="description" maxlength="180" rows="2" placeholder="Adjustment reason"></textarea><fieldset class="date-options"><legend>Date and time</legend><label><input type="radio" name="dateMode" value="hidden" checked><span><strong>Hide date</strong><small>Do not show a date or time</small></span></label><label><input type="radio" name="dateMode" value="manual"><span><strong>Set manually</strong><small>Choose the date and time</small></span></label></fieldset><label class="manual-date" hidden><span>Transaction date and time</span><input name="createdAt" type="datetime-local" step="60"></label><button class="primary" type="submit">Apply transaction</button></form></aside></div>`;
+      `<div class="customer-head"><div><h2>${escape(data.customer.name)}</h2><p>${escape(data.customer.username)} · ${escape(data.customer.accountNumber)}</p></div><div class="account-chip"><span>${money(data.customer.balance)}</span><small>Primary account balance</small></div></div><div class="metrics"><div class="metric"><small>Accounts</small><strong>${accounts.length}</strong></div><div class="metric"><small>Transactions</small><strong>${data.transactions.length}</strong></div><div class="metric"><small>Withdrawals</small><strong>${withdrawals.length}</strong></div></div><section class="account-portfolio"><div class="account-portfolio-head"><div><small>CUSTOMER ACCOUNTS</small><h3>Balances by currency</h3></div>${hasTryAccount ? '<span class="try-ready">TRY account active</span>' : ''}</div><div class="operator-account-grid">${accounts.map((account) => `<article class="operator-account-card ${account.currency === 'TRY' ? 'try-account' : ''}"><div><span>${escape(account.currency)}</span>${account.isPrimary ? '<small>PRIMARY</small>' : ''}</div><strong>${money(account.balance, account.currency)}</strong><p>${escape(account.accountNumber)}</p></article>`).join('')}${hasTryAccount ? '' : `<form id="try-account-form" class="operator-account-card add-try-account"><div><span>TRY</span><small>NEW ACCOUNT</small></div><h4>Add Turkish lira account</h4><label>Opening balance<input name="openingBalance" type="number" min="0" max="1000000000" step="0.01" value="0" required></label><button type="submit">Create TRY account</button></form>`}</div></section><section class="banking-identifiers"><div><small>Primary account / IBAN</small><strong>${escape(data.customer.accountNumber)}</strong></div><div class="card-number-field"><div class="card-number-display"><small>Demo card</small><strong>${escape(maskCard(data.customer.cardNumber))}</strong><button id="edit-card-number" type="button">Edit number</button></div><form id="card-number-form" hidden><label for="card-number-input">Card number</label><input id="card-number-input" name="cardNumber" value="${escape(data.customer.cardNumber)}" inputmode="numeric" autocomplete="off" maxlength="19" pattern="[0-9]{4}( [0-9]{4}){3}" required><div><button class="save-card-number" type="submit">Save</button><button id="cancel-card-number" type="button">Cancel</button></div></form></div><div><small>Demo validity · code</small><strong>${escape(data.customer.cardExpiry)} · ${escape(data.customer.cardCvv)}</strong></div><button id="operator-card-status" type="button">${data.customer.cardStatus === 'frozen' ? 'Unfreeze card' : 'Freeze card'}</button></section><div class="detail-grid account-detail-grid"><section class="block"><h3>Recent activity</h3><div class="transaction-list">${data.transactions.map(txRow).join('') || '<p>No transactions yet.</p>'}</div></section><aside class="block actions"><h3>Adjust balance</h3><form id="balance-form"><label class="field-label">Account<select name="accountId">${accounts.map((account) => `<option value="${escape(account.id)}">${escape(account.currency)} · ${escape(account.accountNumber.slice(-9))} · ${escape(money(account.balance, account.currency))}</option>`).join('')}</select></label><div class="segmented"><label><input type="radio" name="type" value="credit" checked>Credit</label><label><input type="radio" name="type" value="debit">Debit</label></div><input name="amount" type="number" min="0.01" step="0.01" placeholder="Amount" required><textarea name="description" maxlength="180" rows="2" placeholder="Adjustment reason"></textarea><fieldset class="date-options"><legend>Date and time</legend><label><input type="radio" name="dateMode" value="hidden" checked><span><strong>Hide date</strong><small>Do not show a date or time</small></span></label><label><input type="radio" name="dateMode" value="manual"><span><strong>Set manually</strong><small>Choose the date and time</small></span></label></fieldset><label class="manual-date" hidden><span>Transaction date and time</span><input name="createdAt" type="datetime-local" step="60"></label><button class="primary" type="submit">Apply transaction</button></form></aside></div>`;
     wireForms();
     fail();
   } catch (e) {
@@ -143,6 +147,25 @@ async function deleteSelectedCustomer() {
   }
 }
 function wireForms() {
+  const tryAccountForm = $('#try-account-form');
+  if (tryAccountForm)
+    tryAccountForm.onsubmit = async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      const button = event.currentTarget.querySelector('button');
+      button.disabled = true;
+      try {
+        await api(`/api/operator/customers/${state.selected}/accounts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ currency: 'TRY', openingBalance: Number(form.get('openingBalance')) })
+        });
+        await loadCustomers();
+      } catch (e) {
+        fail(e.message);
+        button.disabled = false;
+      }
+    };
   const deleteButton = document.createElement('button');
   deleteButton.type = 'button';
   deleteButton.className = 'delete-customer';
@@ -213,6 +236,7 @@ function wireForms() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          accountId: form.get('accountId'),
           type: form.get('type'),
           amount: Number(form.get('amount')),
           description: form.get('description'),

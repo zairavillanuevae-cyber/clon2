@@ -8,17 +8,17 @@
     <title>My banking — Educational demo</title>
     <meta name="description" content="Clear, secure digital banking available on any device." />
     <link rel="icon" href="/favicon.ico" sizes="any" />
-    <link rel="stylesheet" href="/internet-banking/banking.css?v=20260904-2" />
+    <link rel="stylesheet" href="/internet-banking/banking.css?v=20260910-1" />
     <link rel="stylesheet" href="/hidden.css" />
     <script src="/vendor/gsap.min.js"></script>
-    <script type="module" src="/internet-banking/banking.js?v=20260904-2"></script>
+    <script type="module" src="/internet-banking/banking.js?v=20260910-1"></script>
   </head>
   <body>
     <main id="login" class="login">
       <section class="login-art" aria-label="Welcome">
         <a href="" class="brand brand-on-dark"
-          ><span class="brand-mark-shell"><img src="/internet-banking/nova-edu-mark.png" alt="" /></span></a
-        >
+          ><span class="brand-mark-shell"><img src="/internet-banking/nova-edu-mark.png" alt="" /></span
+        ></a>
         <div class="login-copy">
           <p class="eyebrow">Personal banking</p>
           <h1>Your money, always within reach.</h1>
@@ -29,8 +29,8 @@
       <section class="login-panel">
         <form id="login-form">
           <a href="" class="mobile-brand brand"
-            ><span class="brand-mark-shell"><img src="/internet-banking/nova-edu-mark.png" alt="" /></span></a
-          >
+            ><span class="brand-mark-shell"><img src="/internet-banking/nova-edu-mark.png" alt="" /></span
+          ></a>
           <p class="eyebrow">Secure access</p>
           <h2>Welcome back</h2>
           <p class="form-intro">Sign in to view your banking.</p>
@@ -46,8 +46,8 @@
       <aside class="side-nav">
         <div class="sidebar-top">
           <a href="" class="brand brand-on-dark"
-            ><span class="brand-mark-shell"><img src="/internet-banking/nova-edu-mark.png" alt="" /></span></a
-          >
+            ><span class="brand-mark-shell"><img src="/internet-banking/nova-edu-mark.png" alt="" /></span
+          ></a>
           <span class="secure-badge">SECURE</span>
         </div>
         <div class="sidebar-account">
@@ -86,8 +86,8 @@
         <header class="topbar">
           <div class="mobile-bank-head">
             <a href="" class="brand brand-on-dark"
-              ><span class="brand-mark-shell"><img src="/internet-banking/nova-edu-mark.png" alt="" /></span></a
-            >
+              ><span class="brand-mark-shell"><img src="/internet-banking/nova-edu-mark.png" alt="" /></span
+            ></a>
             <div class="mobile-head-actions">
               <button type="button" data-view="support" aria-label="Open support">⌕</button>
               <button type="button" data-view="activity" aria-label="View notifications">●</button>
@@ -174,12 +174,30 @@
       <div class="receipt-card">
         <div class="receipt-amount"><small>AMOUNT SENT</small><strong id="receipt-amount">$0.00</strong></div>
         <dl>
-          <div><dt>Recipient name</dt><dd id="receipt-recipient"></dd></div>
-          <div><dt>Recipient account</dt><dd id="receipt-recipient-account"></dd></div>
-          <div><dt>Date and time</dt><dd id="receipt-date"></dd></div>
-          <div><dt>Reference</dt><dd id="receipt-reference"></dd></div>
-          <div><dt>Receipt number</dt><dd id="receipt-number"></dd></div>
-          <div><dt>Available balance</dt><dd id="receipt-balance"></dd></div>
+          <div>
+            <dt>Recipient name</dt>
+            <dd id="receipt-recipient"></dd>
+          </div>
+          <div>
+            <dt>Recipient account</dt>
+            <dd id="receipt-recipient-account"></dd>
+          </div>
+          <div>
+            <dt>Date and time</dt>
+            <dd id="receipt-date"></dd>
+          </div>
+          <div>
+            <dt>Reference</dt>
+            <dd id="receipt-reference"></dd>
+          </div>
+          <div>
+            <dt>Receipt number</dt>
+            <dd id="receipt-number"></dd>
+          </div>
+          <div>
+            <dt>Available balance</dt>
+            <dd id="receipt-balance"></dd>
+          </div>
         </dl>
       </div>
       <div class="receipt-actions">
@@ -196,9 +214,18 @@
       <div class="refund-summary">
         <div><small>AMOUNT RETURNED</small><strong id="refund-amount">$0.00</strong></div>
         <dl>
-          <div><dt>Original transfer</dt><dd id="refund-transfer-number"></dd></div>
-          <div><dt>Returned on</dt><dd id="refund-date"></dd></div>
-          <div><dt>Available balance</dt><dd id="refund-balance"></dd></div>
+          <div>
+            <dt>Original transfer</dt>
+            <dd id="refund-transfer-number"></dd>
+          </div>
+          <div>
+            <dt>Returned on</dt>
+            <dd id="refund-date"></dd>
+          </div>
+          <div>
+            <dt>Available balance</dt>
+            <dd id="refund-balance"></dd>
+          </div>
         </dl>
       </div>
       <button id="accept-refund" class="primary refund-accept" type="button">Accept</button>

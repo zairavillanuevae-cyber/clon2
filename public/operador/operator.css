@@ -560,6 +560,104 @@ textarea {
   border: 1px solid var(--line);
   margin: 38px 0;
 }
+.account-portfolio {
+  margin: -20px 0 38px;
+}
+.account-portfolio-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 14px;
+}
+.account-portfolio-head small {
+  color: var(--red);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+.account-portfolio-head h3 {
+  margin: 4px 0 0;
+  font-size: 21px;
+}
+.try-ready {
+  padding: 7px 10px;
+  border-radius: 99px;
+  background: #eaf6f0;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+}
+.operator-account-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+  gap: 12px;
+}
+.operator-account-card {
+  min-height: 152px;
+  margin: 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  background: #f8f9f6;
+}
+.operator-account-card.try-account {
+  border-color: #dfc9a2;
+  background: linear-gradient(135deg, #fffaf0, #f5efe2);
+}
+.operator-account-card > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.operator-account-card span {
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+.operator-account-card small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+.operator-account-card > strong {
+  display: block;
+  margin-top: 25px;
+  font-size: 27px;
+}
+.operator-account-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.add-try-account {
+  display: grid;
+  gap: 10px;
+  background: #fff;
+}
+.add-try-account h4 {
+  margin: 0;
+  font-size: 16px;
+}
+.add-try-account label {
+  color: var(--muted);
+  font-size: 12px;
+}
+.add-try-account input {
+  width: 100%;
+  margin-top: 5px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  font: inherit;
+}
+.add-try-account button {
+  border: 0;
+  padding: 10px;
+  background: var(--red);
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
 .banking-identifiers {
   display: grid;
   grid-template-columns: 1.3fr 1fr 0.8fr auto;
@@ -737,12 +835,22 @@ textarea {
   opacity: 0;
 }
 .actions input,
+.actions select,
 .actions textarea,
 .chat-form textarea {
   width: 100%;
   border: 1px solid var(--line);
   padding: 12px;
   background: #fff;
+}
+.actions .field-label {
+  color: var(--muted);
+  font-size: 13px;
+}
+.actions .field-label select {
+  display: block;
+  margin-top: 7px;
+  font: inherit;
 }
 .actions textarea {
   resize: vertical;

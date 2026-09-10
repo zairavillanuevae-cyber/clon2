@@ -519,6 +519,45 @@ test('customer transfers are available while deposits and payments remain blocke
   ).json();
   assert.equal(customers.customers.length, 2);
   const id = customers.customers[0].id;
+  const tryAccountResponse = await fetch(`${base}/api/operator/customers/${id}/accounts`, {
+    method: 'POST',
+    headers: { cookie: operatorCookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ currency: 'TRY', openingBalance: 1500 })
+  });
+  assert.equal(tryAccountResponse.status, 201);
+  const tryAccountData = await tryAccountResponse.json();
+  assert.equal(tryAccountData.account.currency, 'TRY');
+  assert.equal(tryAccountData.account.balance, 1500);
+  assert.equal(tryAccountData.customer.accounts.length, 2);
+  const tryCredit = await fetch(`${base}/api/operator/customers/${id}/transactions`, {
+    method: 'POST',
+    headers: { cookie: operatorCookie, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      accountId: tryAccountData.account.id,
+      type: 'credit',
+      amount: 250.75,
+      description: 'Turkish lira adjustment'
+    })
+  });
+  assert.equal(tryCredit.status, 201);
+  const tryCreditData = await tryCredit.json();
+  assert.equal(tryCreditData.account.balance, 1750.75);
+  assert.equal(tryCreditData.transaction.currency, 'TRY');
+  const customerWithTry = await (await fetch(base + '/api/banking/me', { headers: { cookie: customerCookie } })).json();
+  assert.deepEqual(
+    customerWithTry.customer.accounts.map((account) => [account.currency, account.balance]),
+    [
+      ['USD', 12700],
+      ['TRY', 1750.75]
+    ]
+  );
+  assert.ok(customerWithTry.transactions.some((transaction) => transaction.currency === 'TRY'));
+  const duplicateTryAccount = await fetch(`${base}/api/operator/customers/${id}/accounts`, {
+    method: 'POST',
+    headers: { cookie: operatorCookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ currency: 'TRY', openingBalance: 0 })
+  });
+  assert.equal(duplicateTryAccount.status, 409);
   const invalidCardEdit = await fetch(`${base}/api/operator/customers/${id}/card-number`, {
     method: 'PATCH',
     headers: { cookie: operatorCookie, 'content-type': 'application/json' },
